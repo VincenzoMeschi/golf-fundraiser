@@ -34,6 +34,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <Link href="/teams" className="hover:text-accent">
                     Teams
                   </Link>
+                  <Link href="/sponsor" className="hover:text-accent">
+                    Sponsor
+                  </Link>
                   <UserButton afterSignOutUrl="/" />
                 </SignedIn>
               </div>

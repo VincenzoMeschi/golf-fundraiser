@@ -38,8 +38,9 @@ export async function POST(request: Request) {
   return NextResponse.json(result);
 }
 
+// /app/api/teams/route.ts (PUT section)
 export async function PUT(request: Request) {
-  const { teamId, spotId, userId, isPrivate } = await request.json();
+  const { teamId, spotId, userId, isPrivate, whitelist, name } = await request.json();
   const { db } = await connectToDatabase();
 
   try {
@@ -72,43 +73,69 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: "Spot already assigned to a team" }, { status: 400 });
       }
 
-      const spotEmail = registration.spotDetails.find((s: any) => s.spotId === spotId)?.email;
-      if (team.isPrivate && !team.whitelist.includes(spotEmail)) {
+      const spotDetails = registration.spotDetails.find((s: any) => s.spotId === spotId);
+      if (!spotDetails) {
+        return NextResponse.json({ error: "Spot details not found" }, { status: 400 });
+      }
+
+      const spotEmail = spotDetails.email?.toLowerCase();
+      const spotName = spotDetails.name?.toLowerCase();
+
+      console.log(`Join attempt - spotId: ${spotId}, spotEmail: ${spotEmail}, spotName: ${spotName}, whitelist: ${team.whitelist}`);
+
+      // Check if the spot's email or name is in the whitelist (case-insensitive)
+      if (team.isPrivate && !team.whitelist.some((w) => w.toLowerCase() === spotEmail || w.toLowerCase() === spotName)) {
         return NextResponse.json({ error: "Not authorized to join private team" }, { status: 403 });
       }
 
       const result = await db.collection("teams").updateOne({ _id: new ObjectId(teamId) }, { $addToSet: { members: { spotId, registrationId: registration._id.toString() } } });
 
       if (result.modifiedCount === 0) {
-        return NextResponse.json({ error: "Failed to add spot to team" }, { status: 500 });
+        return NextResponse.json({ error: "No changes provided by user" }, { status: 500 });
       }
 
       return NextResponse.json({ success: true });
     }
 
-    // Handle toggling team privacy
-    if (typeof isPrivate === "boolean") {
+    // Handle updating team privacy, whitelist, and/or name
+    if (typeof isPrivate === "boolean" || (whitelist && Array.isArray(whitelist)) || typeof name === "string") {
       if (team.creatorId !== userId) {
-        return NextResponse.json({ error: "Only the creator can update team privacy" }, { status: 403 });
+        return NextResponse.json({ error: "Only the creator can update team details" }, { status: 403 });
       }
 
-      const result = await db.collection("teams").updateOne({ _id: new ObjectId(teamId) }, { $set: { isPrivate } });
+      const updateFields: any = {};
+      if (typeof isPrivate === "boolean") {
+        updateFields.isPrivate = isPrivate;
+      }
+      if (whitelist && Array.isArray(whitelist)) {
+        updateFields.whitelist = whitelist;
+      }
+      if (typeof name === "string" && name.trim() !== "") {
+        updateFields.name = name.trim();
+      }
+
+      if (Object.keys(updateFields).length === 0) {
+        return NextResponse.json({ error: "No valid fields provided to update" }, { status: 400 });
+      }
+
+      const result = await db.collection("teams").updateOne({ _id: new ObjectId(teamId) }, { $set: updateFields });
 
       if (result.modifiedCount === 0) {
-        return NextResponse.json({ error: "Failed to update team privacy" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to update team" }, { status: 500 });
       }
 
       return NextResponse.json({ success: true });
     }
 
-    // If neither spotId nor isPrivate is provided, return an error
-    return NextResponse.json({ error: "Invalid request: provide spotId or isPrivate" }, { status: 400 });
+    // If neither spotId, isPrivate, whitelist, nor name is provided, return an error
+    return NextResponse.json({ error: "Invalid request: provide spotId, isPrivate, whitelist, or name" }, { status: 400 });
   } catch (err) {
     console.error(`Error in PUT /api/teams: ${err}`);
     return NextResponse.json({ error: "Invalid teamId or server error" }, { status: 400 });
   }
 }
 
+// /app/api/teams/route.ts (PATCH section)
 export async function PATCH(request: Request) {
   const { teamId, spotId, userId } = await request.json();
   const { db } = await connectToDatabase();
@@ -120,18 +147,25 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Team not found" }, { status: 404 });
     }
 
-    // Check if the user is the team creator
-    if (team.creatorId !== userId) {
-      return NextResponse.json({ error: "Only the team creator can remove spots" }, { status: 403 });
-    }
-
     // Verify the spot exists in the team
     const memberIndex = team.members.findIndex((m: any) => m.spotId === spotId);
     if (memberIndex === -1) {
       return NextResponse.json({ error: "Spot not found in team" }, { status: 400 });
     }
 
-    // Remove the spot from the team without reassigning
+    // Check if the user owns the spot or the team
+    const ownsSpot = await db.collection("registrations").findOne({
+      userId,
+      paymentStatus: "completed",
+      "spotDetails.spotId": spotId,
+    });
+    const ownsTeam = team.creatorId === userId;
+
+    if (!ownsSpot && !ownsTeam) {
+      return NextResponse.json({ error: "User does not own the spot or the team" }, { status: 403 });
+    }
+
+    // Remove the spot from the team
     const result = await db.collection("teams").updateOne({ _id: new ObjectId(teamId) }, { $pull: { members: { spotId } } });
 
     if (result.modifiedCount === 0) {

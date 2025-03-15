@@ -1,7 +1,7 @@
 // components/TeamManagement.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +44,7 @@ export default function TeamManagement() {
   const [allSpots, setAllSpots] = useState<Spot[]>([]);
   const [newTeamName, setNewTeamName] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
-  const [whitelistEmail, setWhitelistEmail] = useState("");
+  const [whitelistEntry, setWhitelistEntry] = useState("");
   const [selectedSpots, setSelectedSpots] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" });
@@ -52,22 +52,18 @@ export default function TeamManagement() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editIsPrivate, setEditIsPrivate] = useState<boolean>(false);
   const [editWhitelist, setEditWhitelist] = useState<string[]>([]);
+  const [editTeamName, setEditTeamName] = useState<string>("");
   const [joinTeam, setJoinTeam] = useState<Team | null>(null);
   const [selectedJoinSpots, setSelectedJoinSpots] = useState<string[]>([]);
+  const [originalWhitelist, setOriginalWhitelist] = useState<string[]>([]);
 
-  useEffect(() => {
-    fetchTeams();
-    fetchUserSpots();
-    fetchAllSpots();
-  }, [user]);
-
-  const fetchTeams = async () => {
+  const fetchTeams = useCallback(async () => {
     const response = await fetch("/api/teams");
     const data = await response.json();
     setTeams(data);
-  };
+  }, []);
 
-  const fetchUserSpots = async () => {
+  const fetchUserSpots = useCallback(async () => {
     if (!user?.id) return;
     const response = await fetch("/api/teams/user-spots", {
       method: "POST",
@@ -76,13 +72,19 @@ export default function TeamManagement() {
     });
     const data = await response.json();
     setUserSpots(data.spots || []);
-  };
+  }, [user?.id]);
 
-  const fetchAllSpots = async () => {
+  const fetchAllSpots = useCallback(async () => {
     const response = await fetch("/api/teams/all-spots");
     const data = await response.json();
     setAllSpots(data.spots || []);
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchTeams();
+    fetchUserSpots();
+    fetchAllSpots();
+  }, [fetchTeams, fetchAllSpots, fetchUserSpots]);
 
   const getSpotName = (spotId: string) => {
     const spot = allSpots.find((s) => s.spotId === spotId);
@@ -178,6 +180,7 @@ export default function TeamManagement() {
   };
 
   const removeSpotFromTeam = async (teamId: string, spotId: string) => {
+    console.log(`Removing spot ${spotId} from team ${teamId} for user ${user?.id}`);
     const response = await fetch("/api/teams", {
       method: "PATCH",
       body: JSON.stringify({ teamId, spotId, userId: user?.id }),
@@ -193,6 +196,7 @@ export default function TeamManagement() {
       });
     } else {
       const error = await response.json();
+      console.error(`Failed to remove spot: ${error.error}`);
       toast({
         title: "Error",
         description: error.error || "Failed to remove spot from team",
@@ -201,21 +205,42 @@ export default function TeamManagement() {
     }
   };
 
-  const whitelistUser = async (teamId: string) => {
-    if (!whitelistEmail) {
+  const whitelistUser = (teamId: string) => {
+    if (!whitelistEntry) {
       toast({
         title: "Error",
-        description: "Please enter an email to whitelist",
+        description: "Please enter an email or full name to whitelist",
         variant: "destructive",
       });
       return;
     }
-    setEditWhitelist((prev) => [...prev, whitelistEmail]);
-    setWhitelistEmail("");
+
+    // Check for duplicate entries (case-insensitive)
+    if (editWhitelist.some((entry) => entry.toLowerCase() === whitelistEntry.toLowerCase())) {
+      toast({
+        title: "Error",
+        description: `${whitelistEntry} is already in the whitelist`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Update local state only
+    setEditWhitelist((prev) => [...prev, whitelistEntry]);
+    setWhitelistEntry("");
+    toast({
+      title: "Success",
+      description: `Added ${whitelistEntry} to whitelist (pending save)`,
+    });
   };
 
-  const removeWhitelistedEmail = async (email: string) => {
-    setEditWhitelist((prev) => prev.filter((e) => e !== email));
+  const removeWhitelistedEmail = (teamId: string, entry: string) => {
+    // Update local state only
+    setEditWhitelist((prev) => prev.filter((e) => e !== entry));
+    toast({
+      title: "Success",
+      description: `Removed ${entry} from whitelist (pending save)`,
+    });
   };
 
   const submitTeamEdits = async () => {
@@ -227,14 +252,18 @@ export default function TeamManagement() {
         teamId: selectedTeam._id,
         userId: user?.id,
         isPrivate: editIsPrivate,
+        name: editTeamName,
         whitelist: editWhitelist,
       }),
       headers: { "Content-Type": "application/json" },
     });
 
     if (response.ok) {
-      fetchTeams();
-      setSelectedTeam(null);
+      await fetchTeams(); // Refresh teams to get the updated data
+      const updatedTeam = teams.find((t) => t._id === selectedTeam._id);
+      if (updatedTeam) {
+        setOriginalWhitelist([...editWhitelist]); // Sync originalWhitelist with the submitted state
+      }
       toast({
         title: "Success",
         description: "Team updated successfully!",
@@ -242,8 +271,8 @@ export default function TeamManagement() {
     } else {
       const error = await response.json();
       toast({
-        title: "Error",
-        description: error.error || "Failed to update team",
+        title: "Try Again",
+        description: error.error || "No changes were made by the user.",
         variant: "destructive",
       });
     }
@@ -282,20 +311,33 @@ export default function TeamManagement() {
   };
 
   const isWhitelisted = (team: Team) => {
-    const userEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase();
-    return team.whitelist.some((email) => email.toLowerCase() === userEmail);
+    // Check if any available spot's name or email matches a whitelist entry (case-insensitive)
+    const availableSpots = userSpots.filter((s) => !teams.some((t) => t.members.some((m) => m.spotId === s.spotId)));
+    return availableSpots.some((spot) => {
+      const spotEmail = spot.email?.toLowerCase();
+      const spotName = spot.name?.toLowerCase();
+      return team.whitelist.some((entry) => entry.toLowerCase() === spotEmail || entry.toLowerCase() === spotName);
+    });
   };
 
   const openEditDialog = (team: Team) => {
     setSelectedTeam(team);
     setEditIsPrivate(team.isPrivate);
     setEditWhitelist([...team.whitelist]);
+    setEditTeamName(team.name);
+    setOriginalWhitelist([...team.whitelist]);
   };
 
   const openJoinDialog = (team: Team) => {
     setJoinTeam(team);
-    setSelectedJoinSpots([]); // Reset selection
+    setSelectedJoinSpots([]);
   };
+
+  // Calculate modified changes for team name, isPrivate, and whitelist
+  const modifiedChanges =
+    (selectedTeam && editTeamName !== selectedTeam.name ? 1 : 0) +
+    (selectedTeam && editIsPrivate !== selectedTeam.isPrivate ? 1 : 0) +
+    (selectedTeam && JSON.stringify(editWhitelist) !== JSON.stringify(originalWhitelist) ? 1 : 0);
 
   return (
     <div className="bg-background">
@@ -308,7 +350,7 @@ export default function TeamManagement() {
       </section>
 
       <div className="container mx-auto px-4 py-8 min-h-screen">
-        <h1 className="text-3xl font-bold mb-6 text-primary sr-only">Team Management</h1> {/* Hidden for accessibility */}
+        <h1 className="text-3xl font-bold mb-6 text-primary sr-only">Team Management</h1>
         <div className="flex justify-end mb-4">
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
@@ -373,14 +415,14 @@ export default function TeamManagement() {
               </TableHeader>
               <TableBody>
                 {filteredTeams.map((team) => (
-                  <TableRow key={team._id}>
+                  <TableRow key={team._id} className={team.creatorId === user?.id ? "bg-blue-100 hover:bg-blue-200" : ""}>
                     <TableCell className="font-bold">{team.name}</TableCell>
                     <TableCell>
                       <div className="flex flex-col space-y-1">
                         {team.members.map((member) => (
                           <span key={member.spotId} className="inline-flex items-center">
                             {getSpotName(member.spotId)}
-                            {(team.creatorId === user?.id || userSpots.some((s) => s.spotId === member.spotId)) && (
+                            {(userSpots.some((s) => s.spotId === member.spotId) || team.creatorId === user?.id) && (
                               <button onClick={() => removeSpotFromTeam(team._id, member.spotId)} className="ml-2 text-red-500 hover:text-red-700">
                                 ✕
                               </button>
@@ -399,7 +441,11 @@ export default function TeamManagement() {
                               variant="outline"
                               size="sm"
                               onClick={() => openJoinDialog(team)}
-                              disabled={!userSpots.some((s) => !team.members.some((m) => m.spotId === s.spotId)) || team.members.length >= 4 || (team.isPrivate && !isWhitelisted(team))}>
+                              disabled={
+                                !userSpots.some((s) => !teams.some((t) => t.members.some((m) => m.spotId === s.spotId))) || // No available spots
+                                team.members.length >= 4 || // Team is full
+                                (team.isPrivate && !isWhitelisted(team)) // Team is private and no spots are whitelisted
+                              }>
                               Join
                             </Button>
                           </DialogTrigger>
@@ -411,7 +457,7 @@ export default function TeamManagement() {
                               <div className="space-y-2">
                                 <Label>Select Reservations (Max {joinTeam ? 4 - joinTeam.members.length - selectedJoinSpots.length : 0} more)</Label>
                                 {userSpots
-                                  .filter((spot) => !team.members.some((m) => m.spotId === spot.spotId))
+                                  .filter((spot) => !teams.some((t) => t.members.some((m) => m.spotId === spot.spotId)))
                                   .map((spot) => (
                                     <div key={spot.spotId} className="flex items-center space-x-2">
                                       <Checkbox
@@ -438,33 +484,69 @@ export default function TeamManagement() {
                             </DialogTrigger>
                             <DialogContent>
                               <DialogHeader>
-                                <DialogTitle>Edit Team: {team.name}</DialogTitle>
+                                <DialogTitle>Edit Team</DialogTitle>
                               </DialogHeader>
-                              <div className="space-y-4">
-                                <div className="flex items-center space-x-2">
-                                  <Label htmlFor="is-private">Private Team</Label>
-                                  <Switch id="is-private" checked={editIsPrivate} onCheckedChange={(checked) => setEditIsPrivate(checked)} />
-                                </div>
-                                {editIsPrivate && (
+                              <div className="space-y-6">
+                                {/* Team Details Section */}
+                                <div className="space-y-4">
+                                  <h3 className="text-lg font-semibold text-primary">Team Details</h3>
                                   <div className="space-y-2">
-                                    <Label>Whitelisted Emails</Label>
-                                    <ul className="list-disc pl-5">
-                                      {editWhitelist.map((email) => (
-                                        <li key={email}>
-                                          {email}
-                                          <Button variant="link" size="sm" onClick={() => removeWhitelistedEmail(email)} className="ml-2 text-red-500">
-                                            Remove
-                                          </Button>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                    <Input placeholder="Email to whitelist" value={whitelistEmail} onChange={(e) => setWhitelistEmail(e.target.value)} className="w-full" />
-                                    <Button size="sm" onClick={() => whitelistUser(team._id)} className="w-full bg-green-500 hover:bg-green-600">
-                                      Add to Whitelist
-                                    </Button>
+                                    <Label htmlFor="edit-team-name">Team Name</Label>
+                                    <Input
+                                      id="edit-team-name"
+                                      value={editTeamName}
+                                      onChange={(e) => setEditTeamName(e.target.value)}
+                                      placeholder="Enter team name"
+                                      className="w-full border-gray-300 focus:border-primary focus:ring-primary"
+                                    />
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <Switch id="is-private" checked={editIsPrivate} onCheckedChange={(checked) => setEditIsPrivate(checked)} />
+                                    <Label htmlFor="is-private">Make Team Private</Label>
+                                  </div>
+                                </div>
+                                {/* Whitelist Section (if private) */}
+                                {editIsPrivate && (
+                                  <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-primary">Manage Whitelist</h3>
+                                    <div className="space-y-2">
+                                      <Label>Whitelisted Emails or Names</Label>
+                                      {editWhitelist.length > 0 ? (
+                                        <ul className="list-disc pl-5 space-y-1">
+                                          {editWhitelist.map((entry) => {
+                                            const isPendingAdd = !originalWhitelist.some((originalEntry) => originalEntry.toLowerCase() === entry.toLowerCase());
+                                            return (
+                                              <li key={entry} className={isPendingAdd ? "text-gray-400" : "text-foreground"}>
+                                                {entry} {isPendingAdd && "(pending)"}
+                                                <Button variant="link" size="sm" onClick={() => removeWhitelistedEmail(team._id, entry)} className="ml-2 text-red-500 hover:text-red-700">
+                                                  Remove
+                                                </Button>
+                                              </li>
+                                            );
+                                          })}
+                                        </ul>
+                                      ) : (
+                                        <p className="text-sm text-muted-foreground">No whitelisted entries yet.</p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <Input
+                                        placeholder="Enter email or full name to whitelist"
+                                        value={whitelistEntry}
+                                        onChange={(e) => setWhitelistEntry(e.target.value)}
+                                        className="w-full border-gray-300 focus:border-primary focus:ring-primary"
+                                      />
+                                      <Button onClick={() => whitelistUser(team._id)} className="bg-green-500 hover:bg-green-600 text-white">
+                                        Add
+                                      </Button>
+                                    </div>
                                   </div>
                                 )}
-                                <Button onClick={submitTeamEdits} className="w-full bg-blue-500 hover:bg-blue-600">
+                                {/* Submit Changes Button */}
+                                <Button
+                                  onClick={submitTeamEdits}
+                                  disabled={modifiedChanges === 0}
+                                  className={`w-full ${modifiedChanges === 0 ? "bg-gray-300 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600"} text-white`}>
                                   Submit Changes
                                 </Button>
                               </div>

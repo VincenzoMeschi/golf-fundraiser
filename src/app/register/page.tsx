@@ -1,7 +1,6 @@
-// app/register/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUser, SignedIn, SignedOut, RedirectToSignIn } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +19,12 @@ type SpotDetails = {
   userId?: string;
 };
 
+type Team = {
+  _id: string;
+  name: string;
+  members: { spotId: string; registrationId: string }[];
+};
+
 type SortConfig = {
   key: keyof SpotDetails;
   direction: "asc" | "desc";
@@ -36,39 +41,51 @@ export default function Register() {
   const [totalSpots, setTotalSpots] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" });
+  const [teams, setTeams] = useState<Team[]>([]); // Store team data
   const searchParams = useSearchParams();
+
+  const fetchTeams = useCallback(async () => {
+    const response = await fetch("/api/teams");
+    const data = await response.json();
+    setTeams(data || []);
+  }, []);
+
+  const fetchPurchasedSpots = useCallback(
+    async (isPolling = false) => {
+      if (!user?.id) return;
+      const response = await fetch("/api/teams/user-spots", {
+        method: "POST",
+        body: JSON.stringify({ userId: user.id }),
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await response.json();
+      console.log(`Fetched purchased spots for user ${user.id}:`, data.spots);
+      setPurchasedSpots(data.spots || []);
+      setTotalSpots(data.spots.reduce((sum: number) => sum + 1, 0));
+      if (isPolling && data.spots.length > 0) {
+        setLoading(false);
+      }
+    },
+    [user?.id]
+  );
 
   useEffect(() => {
     if (user) {
       fetchPurchasedSpots();
+      fetchTeams(); // Fetch teams when the user is logged in
     }
-  }, [user]);
+  }, [user, fetchPurchasedSpots, fetchTeams]);
 
   useEffect(() => {
     if (searchParams.get("success") === "true" && user) {
       setLoading(true);
       const interval = setInterval(() => {
         fetchPurchasedSpots(true);
+        fetchTeams(); // Refresh teams on polling
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [searchParams, user]);
-
-  const fetchPurchasedSpots = async (isPolling = false) => {
-    if (!user?.id) return;
-    const response = await fetch("/api/teams/user-spots", {
-      method: "POST",
-      body: JSON.stringify({ userId: user.id }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const data = await response.json();
-    console.log(`Fetched purchased spots for user ${user.id}:`, data.spots);
-    setPurchasedSpots(data.spots || []);
-    setTotalSpots(data.spots.reduce((sum: number) => sum + 1, 0));
-    if (isPolling && data.spots.length > 0) {
-      setLoading(false);
-    }
-  };
+  }, [searchParams, fetchPurchasedSpots, fetchTeams, user]);
 
   const handleSpotChange = (index: number, field: keyof SpotDetails, value: string) => {
     const newSpotDetails = [...spotDetails];
@@ -133,6 +150,7 @@ export default function Register() {
     });
     if (response.ok) {
       fetchPurchasedSpots();
+      fetchTeams(); // Refresh teams after editing spot
       setEditedSpot(null); // Close dialog
     } else {
       const error = await response.json();
@@ -156,6 +174,13 @@ export default function Register() {
       return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
     });
 
+  // Function to get the team name for a spot
+  const getTeamNameForSpot = (spotId: string | undefined) => {
+    if (!spotId) return "Not Assigned";
+    const team = teams.find((t) => t.members.some((m) => m.spotId === spotId));
+    return team ? team.name : "Not Assigned";
+  };
+
   const handleSort = (key: keyof SpotDetails) => {
     setSortConfig((prev) => ({
       key,
@@ -167,12 +192,7 @@ export default function Register() {
     <div className="bg-background">
       {/* Hero Section with Background Image */}
       <section className="relative h-64">
-        <Image
-          src="https://res.cloudinary.com/dazxax791/image/upload/v1741935541/wvjbv64sllc38p7y042e.webp" // Upload to Cloudinary and replace
-          alt="Stadium View"
-          fill
-          className="object-cover opacity-50"
-        />
+        <Image src="https://res.cloudinary.com/dazxax791/image/upload/v1741935541/wvjbv64sllc38p7y042e.webp" alt="Stadium View" fill className="object-cover opacity-50" />
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20">
           <h1 className="text-4xl font-bold text-primary-foreground drop-shadow-lg">Register for Golf Outing</h1>
         </div>
@@ -185,7 +205,7 @@ export default function Register() {
         <div className="container mx-auto px-4 py-8">
           {loading && <p className="text-muted-foreground">Loading purchased spots...</p>}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-[40%_1fr] gap-6">
             {/* Purchase Spots Card */}
             <Card>
               <CardHeader>
@@ -256,6 +276,7 @@ export default function Register() {
                           <TableHead onClick={() => handleSort("email")} className="cursor-pointer">
                             Email {sortConfig.key === "email" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
                           </TableHead>
+                          <TableHead>Team</TableHead> {/* New column for team name */}
                           <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -265,6 +286,7 @@ export default function Register() {
                             <TableCell>{spot.name}</TableCell>
                             <TableCell>{spot.phone}</TableCell>
                             <TableCell>{spot.email}</TableCell>
+                            <TableCell>{getTeamNameForSpot(spot.spotId)}</TableCell> {/* Display team name */}
                             <TableCell>
                               <Dialog open={editedSpot?.spotId === spot.spotId} onOpenChange={(open) => setEditedSpot(open ? { ...spot } : null)}>
                                 <DialogTrigger asChild>
