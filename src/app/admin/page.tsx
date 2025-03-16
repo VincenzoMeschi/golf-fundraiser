@@ -4,8 +4,6 @@ import { useState, useEffect } from "react";
 import { useUser, SignedIn, SignedOut, RedirectToSignIn } from "@clerk/nextjs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
@@ -198,276 +196,274 @@ export default function AdminDashboard() {
   }
 
   return (
-    <SidebarProvider>
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <div className="flex items-center gap-2">
-            <Separator orientation="vertical" className="mr-2 h-4" />
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink href="/admin">Admin</BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator className="hidden md:block" />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>Dashboard</BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
-          </div>
-        </header>
-        <div className="flex flex-1 flex-col gap-4 p-4">
-          {loading ? (
-            <p className="text-muted-foreground">Loading data...</p>
-          ) : (
-            <div className="space-y-8">
-              {/* Paid Users */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="pb-4">Users Who Paid ({paidRegistrations.length})</CardTitle>
-                  <Input
-                    placeholder="Search by User ID..."
-                    value={searchTerms.paidUsers}
-                    onChange={(e) => setSearchTerms((prev) => ({ ...prev, paidUsers: e.target.value }))}
-                    className="w-full max-w-sm"
-                  />
-                </CardHeader>
-                <CardContent>
-                  {paidRegistrations.length === 0 ? (
-                    <p className="text-muted-foreground">No paid registrations found.</p>
-                  ) : (
-                    <>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead onClick={() => handleSort("userId")} className="cursor-pointer">
-                              User ID {sortConfig.key === "userId" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("spotDetails")} className="cursor-pointer">
-                              Spots Purchased {sortConfig.key === "spotDetails" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {paginatedPaidRegistrations.map((reg) => (
-                            <TableRow key={reg._id}>
-                              <TableCell>{reg.userId}</TableCell>
-                              <TableCell>{reg.spotDetails.length}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                      <div className="flex justify-between mt-2">
-                        <Button onClick={() => handlePageChange("paidUsers", currentPage.paidUsers - 1)} disabled={currentPage.paidUsers === 1}>
-                          Previous
-                        </Button>
-                        <span>
-                          Page {currentPage.paidUsers} of {Math.ceil(paidRegistrations.length / itemsPerPage)}
-                        </span>
-                        <Button onClick={() => handlePageChange("paidUsers", currentPage.paidUsers + 1)} disabled={currentPage.paidUsers * itemsPerPage >= paidRegistrations.length}>
-                          Next
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* All Reservations */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="pb-4">All Reservations ({allReservations.length})</CardTitle>
-                  <Input
-                    placeholder="Search by Name, Phone, Email, or User ID..."
-                    value={searchTerms.reservations}
-                    onChange={(e) => setSearchTerms((prev) => ({ ...prev, reservations: e.target.value }))}
-                    className="w-full max-w-sm mt-2"
-                  />
-                </CardHeader>
-                <CardContent>
-                  {allReservations.length === 0 ? (
-                    <p className="text-muted-foreground">No reservations found.</p>
-                  ) : (
-                    <>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead onClick={() => handleSort("userId")} className="cursor-pointer">
-                              User ID {sortConfig.key === "userId" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("name")} className="cursor-pointer">
-                              Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("phone")} className="cursor-pointer">
-                              Phone {sortConfig.key === "phone" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("email")} className="cursor-pointer">
-                              Email {sortConfig.key === "email" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("paymentStatus")} className="cursor-pointer">
-                              Payment Status {sortConfig.key === "paymentStatus" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {paginatedReservations.map((spot) => (
-                            <TableRow key={spot.spotId}>
-                              <TableCell>{spot.userId}</TableCell>
-                              <TableCell>{spot.name}</TableCell>
-                              <TableCell>{spot.phone}</TableCell>
-                              <TableCell>{spot.email}</TableCell>
-                              <TableCell>{spot.paymentStatus}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                      <div className="flex justify-between mt-2">
-                        <Button onClick={() => handlePageChange("reservations", currentPage.reservations - 1)} disabled={currentPage.reservations === 1}>
-                          Previous
-                        </Button>
-                        <span>
-                          Page {currentPage.reservations} of {Math.ceil(allReservations.length / itemsPerPage)}
-                        </span>
-                        <Button onClick={() => handlePageChange("reservations", currentPage.reservations + 1)} disabled={currentPage.reservations * itemsPerPage >= allReservations.length}>
-                          Next
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* All Teams */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="pb-4">All Teams ({teams.length})</CardTitle>
-                  <Input
-                    placeholder="Search by Name or Creator ID..."
-                    value={searchTerms.teams}
-                    onChange={(e) => setSearchTerms((prev) => ({ ...prev, teams: e.target.value }))}
-                    className="w-full max-w-sm mt-2"
-                  />
-                </CardHeader>
-                <CardContent>
-                  {teams.length === 0 ? (
-                    <p className="text-muted-foreground">No teams found.</p>
-                  ) : (
-                    <>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead onClick={() => handleSort("name")} className="cursor-pointer">
-                              Team Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("isPrivate")} className="cursor-pointer">
-                              Type {sortConfig.key === "isPrivate" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("creatorId")} className="cursor-pointer">
-                              Creator ID {sortConfig.key === "creatorId" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("members")} className="cursor-pointer">
-                              Members {sortConfig.key === "members" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {paginatedTeams.map((team) => (
-                            <TableRow key={team._id}>
-                              <TableCell>{team.name}</TableCell>
-                              <TableCell>{team.isPrivate ? "Private" : "Public"}</TableCell>
-                              <TableCell>{team.creatorId}</TableCell>
-                              <TableCell>{team.members.length}/4</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                      <div className="flex justify-between mt-2">
-                        <Button onClick={() => handlePageChange("teams", currentPage.teams - 1)} disabled={currentPage.teams === 1}>
-                          Previous
-                        </Button>
-                        <span>
-                          Page {currentPage.teams} of {Math.ceil(teams.length / itemsPerPage)}
-                        </span>
-                        <Button onClick={() => handlePageChange("teams", currentPage.teams + 1)} disabled={currentPage.teams * itemsPerPage >= teams.length}>
-                          Next
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* All Sponsors */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="pb-4">All Sponsors ({sponsors.length})</CardTitle>
-                  <Input
-                    placeholder="Search by Name or User ID..."
-                    value={searchTerms.sponsors}
-                    onChange={(e) => setSearchTerms((prev) => ({ ...prev, sponsors: e.target.value }))}
-                    className="w-full max-w-sm mt-2"
-                  />
-                </CardHeader>
-                <CardContent>
-                  {sponsors.length === 0 ? (
-                    <p className="text-muted-foreground">No sponsors found.</p>
-                  ) : (
-                    <>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead onClick={() => handleSort("userId")} className="cursor-pointer">
-                              User ID {sortConfig.key === "userId" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("name")} className="cursor-pointer">
-                              Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("price")} className="cursor-pointer">
-                              Price {sortConfig.key === "price" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("logo")} className="cursor-pointer">
-                              Logo URL {sortConfig.key === "logo" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                            <TableHead onClick={() => handleSort("websiteLink")} className="cursor-pointer">
-                              Website {sortConfig.key === "websiteLink" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {paginatedSponsors.map((sponsor) => (
-                            <TableRow key={sponsor._id}>
-                              <TableCell>{sponsor.userId}</TableCell>
-                              <TableCell>{sponsor.name}</TableCell>
-                              <TableCell>${sponsor.price.toLocaleString()}</TableCell>
-                              <TableCell>{sponsor.logo}</TableCell>
-                              <TableCell>
-                                <a href={sponsor.websiteLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                                  {sponsor.websiteLink}
-                                </a>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                      <div className="flex justify-between mt-2">
-                        <Button onClick={() => handlePageChange("sponsors", currentPage.sponsors - 1)} disabled={currentPage.sponsors === 1}>
-                          Previous
-                        </Button>
-                        <span>
-                          Page {currentPage.sponsors} of {Math.ceil(sponsors.length / itemsPerPage)}
-                        </span>
-                        <Button onClick={() => handlePageChange("sponsors", currentPage.sponsors + 1)} disabled={currentPage.sponsors * itemsPerPage >= sponsors.length}>
-                          Next
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
+    <div>
+      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+        <div className="flex items-center gap-2">
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem className="hidden md:block">
+                <BreadcrumbLink href="/admin">Admin</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator className="hidden md:block" />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Dashboard</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
         </div>
-      </SidebarInset>
-    </SidebarProvider>
+      </header>
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        {loading ? (
+          <p className="text-muted-foreground">Loading data...</p>
+        ) : (
+          <div className="space-y-8">
+            {/* Paid Users */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="pb-4">Users Who Paid ({paidRegistrations.length})</CardTitle>
+                <Input
+                  placeholder="Search by User ID..."
+                  value={searchTerms.paidUsers}
+                  onChange={(e) => setSearchTerms((prev) => ({ ...prev, paidUsers: e.target.value }))}
+                  className="w-full max-w-sm"
+                />
+              </CardHeader>
+              <CardContent>
+                {paidRegistrations.length === 0 ? (
+                  <p className="text-muted-foreground">No paid registrations found.</p>
+                ) : (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead onClick={() => handleSort("userId")} className="cursor-pointer">
+                            User ID {sortConfig.key === "userId" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("spotDetails")} className="cursor-pointer">
+                            Spots Purchased {sortConfig.key === "spotDetails" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedPaidRegistrations.map((reg) => (
+                          <TableRow key={reg._id}>
+                            <TableCell>{reg.userId}</TableCell>
+                            <TableCell>{reg.spotDetails.length}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <div className="flex justify-between mt-2">
+                      <Button onClick={() => handlePageChange("paidUsers", currentPage.paidUsers - 1)} disabled={currentPage.paidUsers === 1}>
+                        Previous
+                      </Button>
+                      <span>
+                        Page {currentPage.paidUsers} of {Math.ceil(paidRegistrations.length / itemsPerPage)}
+                      </span>
+                      <Button onClick={() => handlePageChange("paidUsers", currentPage.paidUsers + 1)} disabled={currentPage.paidUsers * itemsPerPage >= paidRegistrations.length}>
+                        Next
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* All Reservations */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="pb-4">All Reservations ({allReservations.length})</CardTitle>
+                <Input
+                  placeholder="Search by Name, Phone, Email, or User ID..."
+                  value={searchTerms.reservations}
+                  onChange={(e) => setSearchTerms((prev) => ({ ...prev, reservations: e.target.value }))}
+                  className="w-full max-w-sm mt-2"
+                />
+              </CardHeader>
+              <CardContent>
+                {allReservations.length === 0 ? (
+                  <p className="text-muted-foreground">No reservations found.</p>
+                ) : (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead onClick={() => handleSort("userId")} className="cursor-pointer">
+                            User ID {sortConfig.key === "userId" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("name")} className="cursor-pointer">
+                            Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("phone")} className="cursor-pointer">
+                            Phone {sortConfig.key === "phone" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("email")} className="cursor-pointer">
+                            Email {sortConfig.key === "email" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("paymentStatus")} className="cursor-pointer">
+                            Payment Status {sortConfig.key === "paymentStatus" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedReservations.map((spot) => (
+                          <TableRow key={spot.spotId}>
+                            <TableCell>{spot.userId}</TableCell>
+                            <TableCell>{spot.name}</TableCell>
+                            <TableCell>{spot.phone}</TableCell>
+                            <TableCell>{spot.email}</TableCell>
+                            <TableCell>{spot.paymentStatus}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <div className="flex justify-between mt-2">
+                      <Button onClick={() => handlePageChange("reservations", currentPage.reservations - 1)} disabled={currentPage.reservations === 1}>
+                        Previous
+                      </Button>
+                      <span>
+                        Page {currentPage.reservations} of {Math.ceil(allReservations.length / itemsPerPage)}
+                      </span>
+                      <Button onClick={() => handlePageChange("reservations", currentPage.reservations + 1)} disabled={currentPage.reservations * itemsPerPage >= allReservations.length}>
+                        Next
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* All Teams */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="pb-4">All Teams ({teams.length})</CardTitle>
+                <Input
+                  placeholder="Search by Name or Creator ID..."
+                  value={searchTerms.teams}
+                  onChange={(e) => setSearchTerms((prev) => ({ ...prev, teams: e.target.value }))}
+                  className="w-full max-w-sm mt-2"
+                />
+              </CardHeader>
+              <CardContent>
+                {teams.length === 0 ? (
+                  <p className="text-muted-foreground">No teams found.</p>
+                ) : (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead onClick={() => handleSort("name")} className="cursor-pointer">
+                            Team Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("isPrivate")} className="cursor-pointer">
+                            Type {sortConfig.key === "isPrivate" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("creatorId")} className="cursor-pointer">
+                            Creator ID {sortConfig.key === "creatorId" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("members")} className="cursor-pointer">
+                            Members {sortConfig.key === "members" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedTeams.map((team) => (
+                          <TableRow key={team._id}>
+                            <TableCell>{team.name}</TableCell>
+                            <TableCell>{team.isPrivate ? "Private" : "Public"}</TableCell>
+                            <TableCell>{team.creatorId}</TableCell>
+                            <TableCell>{team.members.length}/4</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <div className="flex justify-between mt-2">
+                      <Button onClick={() => handlePageChange("teams", currentPage.teams - 1)} disabled={currentPage.teams === 1}>
+                        Previous
+                      </Button>
+                      <span>
+                        Page {currentPage.teams} of {Math.ceil(teams.length / itemsPerPage)}
+                      </span>
+                      <Button onClick={() => handlePageChange("teams", currentPage.teams + 1)} disabled={currentPage.teams * itemsPerPage >= teams.length}>
+                        Next
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* All Sponsors */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="pb-4">All Sponsors ({sponsors.length})</CardTitle>
+                <Input
+                  placeholder="Search by Name or User ID..."
+                  value={searchTerms.sponsors}
+                  onChange={(e) => setSearchTerms((prev) => ({ ...prev, sponsors: e.target.value }))}
+                  className="w-full max-w-sm mt-2"
+                />
+              </CardHeader>
+              <CardContent>
+                {sponsors.length === 0 ? (
+                  <p className="text-muted-foreground">No sponsors found.</p>
+                ) : (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead onClick={() => handleSort("userId")} className="cursor-pointer">
+                            User ID {sortConfig.key === "userId" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("name")} className="cursor-pointer">
+                            Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("price")} className="cursor-pointer">
+                            Price {sortConfig.key === "price" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("logo")} className="cursor-pointer">
+                            Logo URL {sortConfig.key === "logo" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                          <TableHead onClick={() => handleSort("websiteLink")} className="cursor-pointer">
+                            Website {sortConfig.key === "websiteLink" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedSponsors.map((sponsor) => (
+                          <TableRow key={sponsor._id}>
+                            <TableCell>{sponsor.userId}</TableCell>
+                            <TableCell>{sponsor.name}</TableCell>
+                            <TableCell>${sponsor.price.toLocaleString()}</TableCell>
+                            <TableCell>{sponsor.logo}</TableCell>
+                            <TableCell>
+                              <a href={sponsor.websiteLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                                {sponsor.websiteLink}
+                              </a>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <div className="flex justify-between mt-2">
+                      <Button onClick={() => handlePageChange("sponsors", currentPage.sponsors - 1)} disabled={currentPage.sponsors === 1}>
+                        Previous
+                      </Button>
+                      <span>
+                        Page {currentPage.sponsors} of {Math.ceil(sponsors.length / itemsPerPage)}
+                      </span>
+                      <Button onClick={() => handlePageChange("sponsors", currentPage.sponsors + 1)} disabled={currentPage.sponsors * itemsPerPage >= sponsors.length}>
+                        Next
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

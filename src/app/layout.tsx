@@ -1,11 +1,9 @@
 // app/layout.tsx
-import { ClerkProvider, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { ClerkProvider, SignedIn, UserButton } from "@clerk/nextjs";
 import "./globals.css";
 import Link from "next/link";
 import Image from "next/image";
 import { Toaster } from "@/components/ui/toaster";
-import { Button } from "@/components/ui/button";
-import { SignInButton, SignUpButton } from "@clerk/nextjs";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -13,8 +11,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <html lang="en" className="h-full">
         <body className="h-full flex flex-col">
           <header className="bg-primary text-primary-foreground p-4 shadow-md">
-            <nav className="container mx-auto flex justify-between items-center">
-              <div className="flex items-center gap-4">
+            <nav className="container mx-auto flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-0">
+              <Link href="/">
                 <Image
                   src="https://res.cloudinary.com/dazxax791/image/upload/v1741935050/hpzwqbwqxeyzgwmhy6zb.png"
                   alt="Grand Valley Athletic Society Logo"
@@ -22,12 +20,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   height={60}
                   className="object-contain"
                 />
-                <Link href="/" className="text-xl font-bold">
-                  Golf Fundraiser
-                </Link>
-              </div>
-              <div className="flex items-center space-x-4">
+              </Link>
+              <div className="flex flex-wrap justify-center items-center gap-2 sm:gap-4 text-sm sm:text-base">
                 <SignedIn>
+                  <Link href="/" className="hover:text-accent">
+                    Home
+                  </Link>
                   <Link href="/register" className="hover:text-accent">
                     Register
                   </Link>
@@ -43,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </nav>
           </header>
           <main className="flex-1">{children}</main>
-          <footer className="bg-primary text-primary-foreground py-4 text-center">
+          <footer className="bg-primary text-primary-foreground py-2 text-center text-sm sm:text-base">
             <p>© 2025 Grand Valley Athletic Society. All rights reserved.</p>
           </footer>
           <Toaster />

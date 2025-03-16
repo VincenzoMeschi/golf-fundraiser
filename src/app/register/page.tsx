@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
+import { useToast } from "@/components/ui/use-toast";
+import { Separator } from "@/components/ui/separator";
 
 type SpotDetails = {
   spotId?: string;
@@ -19,19 +21,15 @@ type SpotDetails = {
   userId?: string;
 };
 
-type Team = {
-  _id: string;
-  name: string;
-  members: { spotId: string; registrationId: string }[];
-};
-
-type SortConfig = {
-  key: keyof SpotDetails;
-  direction: "asc" | "desc";
+type ValidationErrors = {
+  name?: string;
+  phone?: string;
+  email?: string;
 };
 
 export default function Register() {
   const { user } = useUser();
+  const { toast } = useToast();
   const [spots, setSpots] = useState(1);
   const [donation, setDonation] = useState(150);
   const [spotDetails, setSpotDetails] = useState<SpotDetails[]>([{ name: "", phone: "", email: user?.primaryEmailAddress?.emailAddress || "" }]);
@@ -40,15 +38,9 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [totalSpots, setTotalSpots] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "name", direction: "asc" });
-  const [teams, setTeams] = useState<Team[]>([]); // Store team data
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors[]>([{ name: "", phone: "", email: "" }]);
+  const [openSpotId, setOpenSpotId] = useState<string | null>(null);
   const searchParams = useSearchParams();
-
-  const fetchTeams = useCallback(async () => {
-    const response = await fetch("/api/teams");
-    const data = await response.json();
-    setTeams(data || []);
-  }, []);
 
   const fetchPurchasedSpots = useCallback(
     async (isPolling = false) => {
@@ -72,31 +64,34 @@ export default function Register() {
   useEffect(() => {
     if (user) {
       fetchPurchasedSpots();
-      fetchTeams(); // Fetch teams when the user is logged in
     }
-  }, [user, fetchPurchasedSpots, fetchTeams]);
+  }, [user, fetchPurchasedSpots]);
 
   useEffect(() => {
     if (searchParams.get("success") === "true" && user) {
       setLoading(true);
       const interval = setInterval(() => {
         fetchPurchasedSpots(true);
-        fetchTeams(); // Refresh teams on polling
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [searchParams, fetchPurchasedSpots, fetchTeams, user]);
+  }, [searchParams, fetchPurchasedSpots, user]);
 
   const handleSpotChange = (index: number, field: keyof SpotDetails, value: string) => {
     const newSpotDetails = [...spotDetails];
     newSpotDetails[index] = { ...newSpotDetails[index], [field]: value };
     setSpotDetails(newSpotDetails);
+    validateForm(index, value, field);
   };
 
   const handleSpotsChange = (value: number) => {
     const newTotal = totalSpots + value;
     if (newTotal > 4) {
-      alert(`Cannot add ${value} spot(s). You already have ${totalSpots}, and the maximum is 4.`);
+      toast({
+        title: "Error",
+        description: `Cannot add ${value} spot(s). You already have ${totalSpots}, and the maximum is 4.`,
+        variant: "destructive",
+      });
       return;
     }
     setSpots(value);
@@ -105,96 +100,146 @@ export default function Register() {
       for (let i = newSpotDetails.length; i < value; i++) {
         newSpotDetails.push({ name: "", phone: "", email: "" });
       }
+      setValidationErrors((prev) => [...prev, { name: "", phone: "", email: "" }]);
     } else {
       newSpotDetails.length = value;
+      const newErrors = validationErrors.slice(0, value).map(() => ({
+        name: "",
+        phone: "",
+        email: "",
+      }));
+      setValidationErrors(newErrors);
     }
     setSpotDetails(newSpotDetails);
   };
 
-  const handleCheckout = async () => {
-    if (donation < 150) {
-      setDonation(150);
-    } else {
-      const response = await fetch("/api/checkout", {
-        method: "POST",
-        body: JSON.stringify({
-          spots,
-          donation,
-          userId: user?.id,
-          spotDetails,
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        alert(error.error || "Failed to initiate payment");
-        return;
-      }
-      const { url } = await response.json();
-      window.location.href = url;
+  const validateForm = (index: number, value: string, field: keyof SpotDetails) => {
+    const errors = [...validationErrors];
+    const nameRegex = /^[^\s]+\s+[^\s]+$/; // First space last (e.g., "John Doe")
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // Basic email validation
+    const phoneRegex = /^\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})$/; // U.S. phone number (e.g., "123-456-7890" or "(123) 456-7890")
+
+    switch (field) {
+      case "name":
+        errors[index].name = nameRegex.test(value) ? "" : "Name must be in 'first last' format (e.g., 'John Doe')";
+        break;
+      case "email":
+        errors[index].email = emailRegex.test(value) ? "" : "Please enter a valid email address";
+        break;
+      case "phone":
+        errors[index].phone = phoneRegex.test(value) ? "" : "Please enter a valid phone number (e.g., '123-456-7890')";
+        break;
+      default:
+        break;
     }
+    setValidationErrors(errors);
+  };
+
+  const isFormValid = () => {
+    return (
+      spotDetails.every((spot, index) => {
+        const { name, phone, email } = spot;
+        const { name: nameError, phone: phoneError, email: emailError } = validationErrors[index];
+        return !nameError && !phoneError && !emailError && name && phone && email;
+      }) && donation >= 150
+    );
+  };
+
+  const handleCheckout = async () => {
+    if (!isFormValid()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fix the validation errors before proceeding.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const response = await fetch("/api/checkout", {
+      method: "POST",
+      body: JSON.stringify({
+        spots,
+        donation,
+        userId: user?.id,
+        spotDetails,
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      toast({
+        title: "Payment Error",
+        description: error.error || "Failed to initiate payment",
+        variant: "destructive",
+      });
+      return;
+    }
+    const { url } = await response.json();
+    window.location.href = url;
   };
 
   const handleEditSpotChange = (field: keyof SpotDetails, value: string) => {
     if (!editedSpot) return;
     setEditedSpot({ ...editedSpot, [field]: value });
+    validateForm(0, value, field);
   };
 
   const handleSubmitEditSpot = async () => {
     if (!editedSpot || !editedSpot.spotId) return;
 
+    const { name, phone, email } = editedSpot;
+    const nameError = /^[^\s]+\s+[^\s]+$/.test(name) ? "" : "Name must be in 'first last' format (e.g., 'John Doe')";
+    const emailError = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? "" : "Please enter a valid email address";
+    const phoneError = /^\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})$/.test(phone) ? "" : "Please enter a valid phone number (e.g., '123-456-7890')";
+
+    if (nameError || emailError || phoneError) {
+      toast({
+        title: "Validation Error",
+        description: `${nameError || emailError || phoneError}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     const response = await fetch("/api/teams/edit-spot", {
       method: "PUT",
-      body: JSON.stringify({ userId: user?.id, spotId: editedSpot.spotId, updatedDetails: editedSpot }),
+      body: JSON.stringify({
+        userId: user?.id,
+        spotId: editedSpot.spotId,
+        updatedDetails: editedSpot,
+      }),
       headers: { "Content-Type": "application/json" },
     });
     if (response.ok) {
       fetchPurchasedSpots();
-      fetchTeams(); // Refresh teams after editing spot
-      setEditedSpot(null); // Close dialog
+      setEditedSpot(null);
+      toast({
+        title: "Success",
+        description: "Spot updated successfully!",
+      });
     } else {
       const error = await response.json();
-      alert(error.error || "Failed to update spot");
+      toast({
+        title: "Error",
+        description: error.error || "Failed to update spot",
+        variant: "destructive",
+      });
     }
   };
 
-  const filteredRegistrations = purchasedSpots
-    .filter((spot) => {
-      const nameMatch = spot.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const phoneMatch = spot.phone.toLowerCase().includes(searchTerm.toLowerCase());
-      const emailMatch = spot.email.toLowerCase().includes(searchTerm.toLowerCase());
-      return nameMatch || phoneMatch || emailMatch;
-    })
-    .sort((a, b) => {
-      const aValue = a[sortConfig.key] ?? ""; // Fallback to empty string if undefined
-      const bValue = b[sortConfig.key] ?? ""; // Fallback to empty string if undefined
-      if (sortConfig.direction === "asc") {
-        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
-      }
-      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
-    });
-
-  // Function to get the team name for a spot
-  const getTeamNameForSpot = (spotId: string | undefined) => {
-    if (!spotId) return "Not Assigned";
-    const team = teams.find((t) => t.members.some((m) => m.spotId === spotId));
-    return team ? team.name : "Not Assigned";
-  };
-
-  const handleSort = (key: keyof SpotDetails) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
-    }));
-  };
+  const filteredRegistrations = purchasedSpots.filter((spot) => {
+    const nameMatch = spot.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const phoneMatch = spot.phone.toLowerCase().includes(searchTerm.toLowerCase());
+    const emailMatch = spot.email.toLowerCase().includes(searchTerm.toLowerCase());
+    return nameMatch || phoneMatch || emailMatch;
+  });
 
   return (
     <div className="bg-background">
       {/* Hero Section with Background Image */}
-      <section className="relative h-64">
+      <section className="relative h-64 sm:h-80">
         <Image src="https://res.cloudinary.com/dazxax791/image/upload/v1741935541/wvjbv64sllc38p7y042e.webp" alt="Stadium View" fill className="object-cover opacity-50" />
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20">
-          <h1 className="text-4xl font-bold text-primary-foreground drop-shadow-lg">Register for Golf Outing</h1>
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20 px-4">
+          <h1 className="text-2xl sm:text-4xl font-bold text-primary-foreground drop-shadow-lg">Register for Golf Outing</h1>
         </div>
       </section>
 
@@ -202,50 +247,93 @@ export default function Register() {
         <RedirectToSignIn />
       </SignedOut>
       <SignedIn>
-        <div className="container mx-auto px-4 py-8">
-          {loading && <p className="text-muted-foreground">Loading purchased spots...</p>}
+        <div className="container mx-auto px-4 py-4 sm:py-8">
+          {loading && <p className="text-muted-foreground text-sm sm:text-base">Loading purchased spots...</p>}
 
-          <div className="grid grid-cols-1 md:grid-cols-[40%_1fr] gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {/* Purchase Spots Card */}
             <Card>
               <CardHeader>
-                <CardTitle>Purchase Spots</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">Purchase Spots</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <Separator className="my-2" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                   <div>
-                    <Label htmlFor="spots">Number of Spots</Label>
-                    <Input id="spots" type="number" min={1} max={4 - totalSpots} value={spots} onChange={(e) => handleSpotsChange(parseInt(e.target.value))} className="w-full" />
-                    <p className="text-sm text-muted-foreground mt-1">Current total: {totalSpots}/4</p>
+                    <Label htmlFor="spots" className="text-sm sm:text-base">
+                      Number of Spots <span className="text-xs sm:text-sm text-muted-foreground pl-1">({totalSpots} Remaining)</span>
+                    </Label>
+                    <Input
+                      id="spots"
+                      type="number"
+                      min={1}
+                      max={4 - totalSpots}
+                      value={spots}
+                      onChange={(e) => handleSpotsChange(parseInt(e.target.value))}
+                      className="w-full text-sm sm:text-base mt-1"
+                    />
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1">Number of spots you would like to purchase</p>
                   </div>
                   <div>
-                    <Label htmlFor="donation">Donation per Spot ($150 min)</Label>
-                    <Input id="donation" type="number" min={150} value={donation} onChange={(e) => setDonation(parseInt(e.target.value))} className="w-full" />
+                    <Label htmlFor="donation" className="text-sm sm:text-base">
+                      Donation per Spot ($150 min)
+                    </Label>
+                    <Input id="donation" type="number" min={150} value={donation} onChange={(e) => setDonation(parseInt(e.target.value))} className="w-full text-sm sm:text-base mt-1" />
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1">Minimum $150 per golfer</p>
                   </div>
                 </div>
                 <div className="space-y-4">
                   {spotDetails.map((spot, index) => (
-                    <div key={index} className="space-y-2 p-4 bg-muted rounded-md border-l-4 border-primary">
-                      <h3 className="font-semibold text-primary">Spot {totalSpots + index + 1}</h3>
-                      <div className="grid grid-cols-2 gap-2">
+                    <div key={index} className="space-y-2 p-3 sm:p-4 bg-muted rounded-md border-l-4 border-primary">
+                      <h3 className="font-semibold text-primary text-sm sm:text-base">Spot {totalSpots + index + 1}</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div>
-                          <Label htmlFor={`name-${index}`}>Name</Label>
-                          <Input id={`name-${index}`} value={spot.name} onChange={(e) => handleSpotChange(index, "name", e.target.value)} placeholder="Full Name" className="w-full" />
+                          <Label htmlFor={`name-${index}`} className="text-sm sm:text-base">
+                            Name
+                          </Label>
+                          <Input
+                            id={`name-${index}`}
+                            value={spot.name}
+                            onChange={(e) => handleSpotChange(index, "name", e.target.value)}
+                            placeholder="Full Name"
+                            className="w-full text-sm sm:text-base mt-1"
+                          />
+                          {validationErrors[index].name && <p className="text-xs text-red-500 mt-1">{validationErrors[index].name}</p>}
                         </div>
                         <div>
-                          <Label htmlFor={`phone-${index}`}>Phone</Label>
-                          <Input id={`phone-${index}`} value={spot.phone} onChange={(e) => handleSpotChange(index, "phone", e.target.value)} placeholder="Phone Number" className="w-full" />
+                          <Label htmlFor={`phone-${index}`} className="text-sm sm:text-base">
+                            Phone
+                          </Label>
+                          <Input
+                            id={`phone-${index}`}
+                            value={spot.phone}
+                            onChange={(e) => handleSpotChange(index, "phone", e.target.value)}
+                            placeholder="Phone Number"
+                            maxLength={12}
+                            className="w-full text-sm sm:text-base mt-1"
+                          />
+                          {validationErrors[index].phone && <p className="text-xs text-red-500 mt-1">{validationErrors[index].phone}</p>}
                         </div>
                       </div>
                       <div>
-                        <Label htmlFor={`email-${index}`}>Email</Label>
-                        <Input id={`email-${index}`} type="email" value={spot.email} onChange={(e) => handleSpotChange(index, "email", e.target.value)} placeholder="Email" className="w-full" />
+                        <Label htmlFor={`email-${index}`} className="text-sm sm:text-base">
+                          Email
+                        </Label>
+                        <Input
+                          id={`email-${index}`}
+                          type="email"
+                          value={spot.email}
+                          onChange={(e) => handleSpotChange(index, "email", e.target.value)}
+                          placeholder="Email"
+                          className="w-full text-sm sm:text-base mt-1"
+                        />
+                        {validationErrors[index].email && <p className="text-xs text-red-500 mt-1">{validationErrors[index].email}</p>}
                       </div>
                     </div>
                   ))}
                 </div>
-                <Button onClick={handleCheckout} className="w-full bg-primary hover:bg-primary/90">
-                  {donation >= 150 ? `Proceed to Payment (\$${spots * donation})` : "Too Low. Click To Update"}
+                <Button onClick={handleCheckout} className="w-full bg-primary hover:bg-primary/90 text-sm sm:text-base py-2" disabled={!isFormValid()}>
+                  {donation >= 150 ? `Proceed to Payment (\$${spots * donation})` : "Invalid Fields"}
                 </Button>
               </CardContent>
             </Card>
@@ -253,44 +341,48 @@ export default function Register() {
             {/* Your Purchased Spots and Registrations Card */}
             <Card>
               <CardHeader>
-                <CardTitle>Your Purchased Spots ({purchasedSpots.length})</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">Your Purchased Spots ({purchasedSpots.length})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <Separator className="my-2" />
                 {purchasedSpots.length === 0 ? (
-                  <p className="text-muted-foreground">No spots purchased yet.</p>
+                  <p className="text-muted-foreground text-sm sm:text-base">No spots purchased yet.</p>
                 ) : (
                   <>
                     <div className="space-y-2">
-                      <Label htmlFor="search-registrations">Search Your Registrations</Label>
-                      <Input id="search-registrations" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search by name, phone, or email" className="w-full" />
+                      <Label htmlFor="search-registrations" className="text-sm sm:text-base">
+                        Search Your Registrations
+                      </Label>
+                      <Input
+                        id="search-registrations"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search by name, phone, or email"
+                        className="w-full text-sm sm:text-base mt-1"
+                      />
                     </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead onClick={() => handleSort("name")} className="cursor-pointer">
-                            Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                          </TableHead>
-                          <TableHead onClick={() => handleSort("phone")} className="cursor-pointer">
-                            Phone {sortConfig.key === "phone" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                          </TableHead>
-                          <TableHead onClick={() => handleSort("email")} className="cursor-pointer">
-                            Email {sortConfig.key === "email" ? (sortConfig.direction === "asc" ? "↑" : "↓") : ""}
-                          </TableHead>
-                          <TableHead>Team</TableHead> {/* New column for team name */}
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredRegistrations.map((spot) => (
-                          <TableRow key={spot.spotId}>
-                            <TableCell>{spot.name}</TableCell>
-                            <TableCell>{spot.phone}</TableCell>
-                            <TableCell>{spot.email}</TableCell>
-                            <TableCell>{getTeamNameForSpot(spot.spotId)}</TableCell> {/* Display team name */}
-                            <TableCell>
+                    {/* Accordion for mobile */}
+                    <div className="sm:hidden space-y-4">
+                      {filteredRegistrations.map((spot) => (
+                        <details
+                          key={spot.spotId}
+                          className="border rounded-lg overflow-hidden"
+                          open={openSpotId === spot.spotId}
+                          onToggle={(e) => setOpenSpotId(e.currentTarget.open ? spot.spotId ?? null : null)}>
+                          <summary className="flex items-center justify-between p-3 bg-gray-100 cursor-pointer hover:bg-gray-200">
+                            <span className="text-sm sm:text-base font-semibold">{spot.name}</span>
+                          </summary>
+                          <div className="p-4 bg-white space-y-2">
+                            <p className="text-sm sm:text-base">
+                              <strong>Phone:</strong> {spot.phone}
+                            </p>
+                            <p className="text-sm sm:text-base">
+                              <strong>Email:</strong> {spot.email}
+                            </p>
+                            <div>
                               <Dialog open={editedSpot?.spotId === spot.spotId} onOpenChange={(open) => setEditedSpot(open ? { ...spot } : null)}>
                                 <DialogTrigger asChild>
-                                  <Button variant="outline" size="sm">
+                                  <Button variant="outline" className="text-xs sm:text-sm px-2 py-1 sm:px-4 sm:py-2 w-full sm:w-auto">
                                     Edit
                                   </Button>
                                 </DialogTrigger>
@@ -300,28 +392,129 @@ export default function Register() {
                                   </DialogHeader>
                                   <div className="space-y-4">
                                     <div>
-                                      <Label htmlFor="edit-name">Name</Label>
-                                      <Input id="edit-name" value={editedSpot?.name || ""} onChange={(e) => handleEditSpotChange("name", e.target.value)} placeholder="Name" className="w-full" />
+                                      <Label htmlFor="edit-name" className="text-sm sm:text-base">
+                                        Name
+                                      </Label>
+                                      <Input
+                                        id="edit-name"
+                                        value={editedSpot?.name || ""}
+                                        onChange={(e) => handleEditSpotChange("name", e.target.value)}
+                                        placeholder="Name"
+                                        className="w-full text-sm sm:text-base mt-1"
+                                      />
                                     </div>
                                     <div>
-                                      <Label htmlFor="edit-phone">Phone</Label>
-                                      <Input id="edit-phone" value={editedSpot?.phone || ""} onChange={(e) => handleEditSpotChange("phone", e.target.value)} placeholder="Phone" className="w-full" />
+                                      <Label htmlFor="edit-phone" className="text-sm sm:text-base">
+                                        Phone
+                                      </Label>
+                                      <Input
+                                        id="edit-phone"
+                                        value={editedSpot?.phone || ""}
+                                        onChange={(e) => handleEditSpotChange("phone", e.target.value)}
+                                        placeholder="Phone"
+                                        className="w-full text-sm sm:text-base mt-1"
+                                      />
                                     </div>
                                     <div>
-                                      <Label htmlFor="edit-email">Email</Label>
-                                      <Input id="edit-email" value={editedSpot?.email || ""} onChange={(e) => handleEditSpotChange("email", e.target.value)} placeholder="Email" className="w-full" />
+                                      <Label htmlFor="edit-email" className="text-sm sm:text-base">
+                                        Email
+                                      </Label>
+                                      <Input
+                                        id="edit-email"
+                                        value={editedSpot?.email || ""}
+                                        onChange={(e) => handleEditSpotChange("email", e.target.value)}
+                                        placeholder="Email"
+                                        className="w-full text-sm sm:text-base mt-1"
+                                      />
                                     </div>
-                                    <Button onClick={handleSubmitEditSpot} className="w-full bg-green-500 hover:bg-green-600">
+                                    <Button onClick={handleSubmitEditSpot} className="w-full bg-green-500 hover:bg-green-600 text-sm sm:text-base py-2">
                                       Submit Changes
                                     </Button>
                                   </div>
                                 </DialogContent>
                               </Dialog>
-                            </TableCell>
+                            </div>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                    {/* Table for desktop */}
+                    <div className="hidden sm:block overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs sm:text-sm min-w-[120px]">Name</TableHead>
+                            <TableHead className="text-xs sm:text-sm min-w-[120px]">Phone</TableHead>
+                            <TableHead className="text-xs sm:text-sm min-w-[150px]">Email</TableHead>
+                            <TableHead className="text-xs sm:text-sm min-w-[80px]">Actions</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredRegistrations.map((spot) => (
+                            <TableRow key={spot.spotId}>
+                              <TableCell className="text-xs sm:text-sm">{spot.name}</TableCell>
+                              <TableCell className="text-xs sm:text-sm">{spot.phone}</TableCell>
+                              <TableCell className="text-xs sm:text-sm">{spot.email}</TableCell>
+                              <TableCell>
+                                <Dialog open={editedSpot?.spotId === spot.spotId} onOpenChange={(open) => setEditedSpot(open ? { ...spot } : null)}>
+                                  <DialogTrigger asChild>
+                                    <Button variant="outline" className="text-xs sm:text-sm px-2 py-1 sm:px-4 sm:py-2">
+                                      Edit
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>Edit Spot: {spot.name}</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <Label htmlFor="edit-name" className="text-sm sm:text-base">
+                                          Name
+                                        </Label>
+                                        <Input
+                                          id="edit-name"
+                                          value={editedSpot?.name || ""}
+                                          onChange={(e) => handleEditSpotChange("name", e.target.value)}
+                                          placeholder="Name"
+                                          className="w-full text-sm sm:text-base mt-1"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor="edit-phone" className="text-sm sm:text-base">
+                                          Phone
+                                        </Label>
+                                        <Input
+                                          id="edit-phone"
+                                          value={editedSpot?.phone || ""}
+                                          onChange={(e) => handleEditSpotChange("phone", e.target.value)}
+                                          placeholder="Phone"
+                                          className="w-full text-sm sm:text-base mt-1"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label htmlFor="edit-email" className="text-sm sm:text-base">
+                                          Email
+                                        </Label>
+                                        <Input
+                                          id="edit-email"
+                                          value={editedSpot?.email || ""}
+                                          onChange={(e) => handleEditSpotChange("email", e.target.value)}
+                                          placeholder="Email"
+                                          className="w-full text-sm sm:text-base mt-1"
+                                        />
+                                      </div>
+                                      <Button onClick={handleSubmitEditSpot} className="w-full bg-green-500 hover:bg-green-600 text-sm sm:text-base py-2">
+                                        Submit Changes
+                                      </Button>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </>
                 )}
               </CardContent>
