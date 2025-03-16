@@ -39,7 +39,7 @@ export async function POST(request: Request) {
         },
       ],
       mode: "payment",
-      success_url: `${origin}/register?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${origin}/teams?success=true&session_id={CHECKOUT_SESSION_ID}`, // Redirect to Teams page on success
       cancel_url: `${origin}/register?cancel=true`,
       metadata: {
         userId,

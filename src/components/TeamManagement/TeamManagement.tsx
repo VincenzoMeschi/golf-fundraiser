@@ -13,6 +13,10 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import Image from "next/image";
 import { Separator } from "../ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CircleAlert } from "lucide-react";
+import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogAction } from "@/components/ui/alert-dialog";
+import { useSearchParams } from "next/navigation";
 
 type Team = {
   _id: string;
@@ -34,6 +38,7 @@ type Spot = {
 export default function TeamManagement() {
   const { user } = useUser();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
   const [teams, setTeams] = useState<Team[]>([]);
   const [userSpots, setUserSpots] = useState<Spot[]>([]);
   const [allSpots, setAllSpots] = useState<Spot[]>([]);
@@ -52,6 +57,16 @@ export default function TeamManagement() {
   const [selectedJoinSpots, setSelectedJoinSpots] = useState<string[]>([]);
   const [originalWhitelist, setOriginalWhitelist] = useState<string[]>([]);
   const [openTeamId, setOpenTeamId] = useState<string | null>(null);
+  const [showPaymentSuccessDialog, setShowPaymentSuccessDialog] = useState(false);
+
+  // Check URL parameters for success=true and session_id
+  useEffect(() => {
+    const isSuccess = searchParams.get("success") === "true";
+    const sessionId = searchParams.get("session_id");
+    if (isSuccess && sessionId) {
+      setShowPaymentSuccessDialog(true);
+    }
+  }, [searchParams]);
 
   const fetchTeams = useCallback(async () => {
     const response = await fetch("/api/teams");
@@ -341,18 +356,22 @@ export default function TeamManagement() {
       <section className="relative h-64 sm:h-80">
         <Image src="https://res.cloudinary.com/dazxax791/image/upload/v1741935869/jbr0murfxrtwat0ag41l.jpg" alt="Meadows Golf Course" fill className="object-cover opacity-50" />
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20 px-4">
-          <h1 className="text-2xl sm:text-4xl font-bold text-primary-foreground drop-shadow-lg">Manage Your Teams</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold text-primary-foreground drop-shadow-lg">Create or Join a Team</h1>
         </div>
       </section>
 
       <div className="container mx-auto px-4 py-4 sm:py-8 min-h-screen">
-        <h1 className="text-xl sm:text-3xl font-bold mb-4 sm:mb-6 text-primary sr-only">Team Management</h1>
+        <Alert className="mb-4 bg-secondary">
+          <CircleAlert className="h-4 w-4" />
+          <AlertTitle>Register Your Players</AlertTitle>
+          <AlertDescription>Add your players to an existing team below, or create a team! Teams can be made both public or private.</AlertDescription>
+        </Alert>
 
         {/* Active Teams Card */}
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle className="text-lg sm:text-xl">Active Teams</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">All Teams</CardTitle>
               <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                 <DialogTrigger asChild>
                   <Button className="bg-primary hover:bg-primary/90 text-sm sm:text-base px-3 py-1 sm:px-4 sm:py-2">Create Team</Button>
@@ -729,6 +748,21 @@ export default function TeamManagement() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Payment Success Alert Dialog */}
+        <AlertDialog open={showPaymentSuccessDialog} onOpenChange={setShowPaymentSuccessDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-lg sm:text-xl">Payment Successful</AlertDialogTitle>
+              <AlertDialogDescription className="text-sm sm:text-base">Your reservation is all set! Please add your new reservation to a team.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction asChild>
+                <Button className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3 bg-primary hover:bg-accent">Close</Button>
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );

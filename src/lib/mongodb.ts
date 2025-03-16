@@ -26,12 +26,5 @@ export async function connectToDatabase() {
     capped: false, // Non-capped collection for unlimited growth
   });
   await db.collection("registrations").createIndex({ userId: 1, paymentStatus: 1 }); // Compound index for common queries
-
-  // Ensure the sponsorships collection exists with a unique index on userId
-  await db.createCollection("sponsorships", {
-    capped: false,
-  });
-  await db.collection("sponsorships").createIndex({ userId: 1 }, { unique: true });
-
   return { db, client };
 }

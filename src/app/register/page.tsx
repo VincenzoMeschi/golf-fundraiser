@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useUser, SignedIn, SignedOut, RedirectToSignIn } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { useToast } from "@/components/ui/use-toast";
 import { Separator } from "@/components/ui/separator";
+import Link from "next/dist/client/link";
 
 type SpotDetails = {
   spotId?: string;
@@ -40,6 +41,7 @@ export default function Register() {
   const [searchTerm, setSearchTerm] = useState("");
   const [validationErrors, setValidationErrors] = useState<ValidationErrors[]>([{ name: "", phone: "", email: "" }]);
   const [openSpotId, setOpenSpotId] = useState<string | null>(null);
+  const initialPurchasedSpotsRef = useRef<SpotDetails[]>([]);
   const searchParams = useSearchParams();
 
   const fetchPurchasedSpots = useCallback(
@@ -52,9 +54,10 @@ export default function Register() {
       });
       const data = await response.json();
       console.log(`Fetched purchased spots for user ${user.id}:`, data.spots);
-      setPurchasedSpots(data.spots || []);
-      setTotalSpots(data.spots.reduce((sum: number) => sum + 1, 0));
-      if (isPolling && data.spots.length > 0) {
+      const newPurchasedSpots = data.spots || [];
+      setPurchasedSpots(newPurchasedSpots);
+      setTotalSpots(newPurchasedSpots.reduce((sum: number) => sum + 1, 0));
+      if (isPolling && newPurchasedSpots.length > 0) {
         setLoading(false);
       }
     },
@@ -64,18 +67,20 @@ export default function Register() {
   useEffect(() => {
     if (user) {
       fetchPurchasedSpots();
+      initialPurchasedSpotsRef.current = [...purchasedSpots]; // Store initial state
     }
   }, [user, fetchPurchasedSpots]);
 
   useEffect(() => {
     if (searchParams.get("success") === "true" && user) {
       setLoading(true);
+      initialPurchasedSpotsRef.current = [...purchasedSpots]; // Reset initial state on payment success
       const interval = setInterval(() => {
         fetchPurchasedSpots(true);
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [searchParams, fetchPurchasedSpots, user]);
+  }, [searchParams, fetchPurchasedSpots, user, purchasedSpots]);
 
   const handleSpotChange = (index: number, field: keyof SpotDetails, value: string) => {
     const newSpotDetails = [...spotDetails];
@@ -261,7 +266,7 @@ export default function Register() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                   <div>
                     <Label htmlFor="spots" className="text-sm sm:text-base">
-                      Number of Spots <span className="text-xs sm:text-sm text-muted-foreground pl-1">({totalSpots} Remaining)</span>
+                      Number of Players <span className="text-xs sm:text-sm text-muted-foreground pl-1">({4 - totalSpots} Remaining)</span>
                     </Label>
                     <Input
                       id="spots"
@@ -276,26 +281,26 @@ export default function Register() {
                   </div>
                   <div>
                     <Label htmlFor="donation" className="text-sm sm:text-base">
-                      Donation per Spot ($150 min)
+                      Donation per Player ($150 min)
                     </Label>
-                    <Input id="donation" type="number" min={150} value={donation} onChange={(e) => setDonation(parseInt(e.target.value))} className="w-full text-sm sm:text-base mt-1" />
+                    <Input id="donation" type="number" min={150} step={5} value={donation} onChange={(e) => setDonation(parseInt(e.target.value))} className="w-full text-sm sm:text-base mt-1" />
                     <p className="text-xs sm:text-sm text-muted-foreground mt-1">Minimum $150 per golfer</p>
                   </div>
                 </div>
                 <div className="space-y-4">
                   {spotDetails.map((spot, index) => (
                     <div key={index} className="space-y-2 p-3 sm:p-4 bg-muted rounded-md border-l-4 border-primary">
-                      <h3 className="font-semibold text-primary text-sm sm:text-base">Spot {totalSpots + index + 1}</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div>
+                      <h3 className="font-semibold text-primary text-sm sm:text-base">Player {totalSpots + index + 1}</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="sm:col-span-2">
                           <Label htmlFor={`name-${index}`} className="text-sm sm:text-base">
-                            Name
+                            Full Name
                           </Label>
                           <Input
                             id={`name-${index}`}
                             value={spot.name}
                             onChange={(e) => handleSpotChange(index, "name", e.target.value)}
-                            placeholder="Full Name"
+                            placeholder="John Doe"
                             className="w-full text-sm sm:text-base mt-1"
                           />
                           {validationErrors[index].name && <p className="text-xs text-red-500 mt-1">{validationErrors[index].name}</p>}
@@ -314,20 +319,21 @@ export default function Register() {
                           />
                           {validationErrors[index].phone && <p className="text-xs text-red-500 mt-1">{validationErrors[index].phone}</p>}
                         </div>
-                      </div>
-                      <div>
-                        <Label htmlFor={`email-${index}`} className="text-sm sm:text-base">
-                          Email
-                        </Label>
-                        <Input
-                          id={`email-${index}`}
-                          type="email"
-                          value={spot.email}
-                          onChange={(e) => handleSpotChange(index, "email", e.target.value)}
-                          placeholder="Email"
-                          className="w-full text-sm sm:text-base mt-1"
-                        />
-                        {validationErrors[index].email && <p className="text-xs text-red-500 mt-1">{validationErrors[index].email}</p>}
+
+                        <div className="sm:col-span-1">
+                          <Label htmlFor={`email-${index}`} className="text-sm sm:text-base">
+                            Email
+                          </Label>
+                          <Input
+                            id={`email-${index}`}
+                            type="email"
+                            value={spot.email}
+                            onChange={(e) => handleSpotChange(index, "email", e.target.value)}
+                            placeholder="Email"
+                            className="w-full text-sm sm:text-base mt-1"
+                          />
+                          {validationErrors[index].email && <p className="text-xs text-red-500 mt-1">{validationErrors[index].email}</p>}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -341,7 +347,9 @@ export default function Register() {
             {/* Your Purchased Spots and Registrations Card */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg sm:text-xl">Your Purchased Spots ({purchasedSpots.length})</CardTitle>
+                <div>
+                  <CardTitle className="text-lg sm:text-xl">Your Purchased Spots ({purchasedSpots.length})</CardTitle>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <Separator className="my-2" />
