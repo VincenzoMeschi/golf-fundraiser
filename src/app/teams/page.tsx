@@ -37,7 +37,7 @@ export default function Teams() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-4 sm:py-8 min-h-screen">
+    <div className="mx-auto min-h-screen">
       <SignedOut>
         <RedirectToSignIn />
       </SignedOut>

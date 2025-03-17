@@ -12,12 +12,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import Image from "next/image";
-import { Separator } from "../ui/separator";
+import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CircleAlert } from "lucide-react";
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { useSearchParams } from "next/navigation";
 
+// Define types for Team and Spot
 type Team = {
   _id: string;
   name: string;
@@ -36,30 +37,34 @@ type Spot = {
 };
 
 export default function TeamManagement() {
+  // Authentication, toast notifications, and URL search params
   const { user } = useUser();
   const { toast } = useToast();
   const searchParams = useSearchParams();
+
+  // State management
   const [teams, setTeams] = useState<Team[]>([]);
   const [userSpots, setUserSpots] = useState<Spot[]>([]);
   const [allSpots, setAllSpots] = useState<Spot[]>([]);
   const [newTeamName, setNewTeamName] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [whitelistEntry, setWhitelistEntry] = useState("");
+  const [initialWhitelist, setInitialWhitelist] = useState<string[]>([]);
   const [selectedSpots, setSelectedSpots] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
-  const [editIsPrivate, setEditIsPrivate] = useState<boolean>(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editIsPrivate, setEditIsPrivate] = useState(false);
   const [editWhitelist, setEditWhitelist] = useState<string[]>([]);
-  const [editTeamName, setEditTeamName] = useState<string>("");
+  const [editTeamName, setEditTeamName] = useState("");
   const [joinTeam, setJoinTeam] = useState<Team | null>(null);
   const [selectedJoinSpots, setSelectedJoinSpots] = useState<string[]>([]);
   const [originalWhitelist, setOriginalWhitelist] = useState<string[]>([]);
   const [openTeamId, setOpenTeamId] = useState<string | null>(null);
   const [showPaymentSuccessDialog, setShowPaymentSuccessDialog] = useState(false);
 
-  // Check URL parameters for success=true and session_id
+  // Check for payment success in URL parameters
   useEffect(() => {
     const isSuccess = searchParams.get("success") === "true";
     const sessionId = searchParams.get("session_id");
@@ -68,6 +73,7 @@ export default function TeamManagement() {
     }
   }, [searchParams]);
 
+  // Fetch teams with callback to update selected team if necessary
   const fetchTeams = useCallback(async () => {
     const response = await fetch("/api/teams");
     const data = await response.json();
@@ -80,6 +86,7 @@ export default function TeamManagement() {
     }
   }, [selectedTeam]);
 
+  // Fetch user's spots
   const fetchUserSpots = useCallback(async () => {
     if (!user?.id) return;
     const response = await fetch("/api/teams/user-spots", {
@@ -91,23 +98,64 @@ export default function TeamManagement() {
     setUserSpots(data.spots || []);
   }, [user?.id]);
 
+  // Fetch all spots
   const fetchAllSpots = useCallback(async () => {
     const response = await fetch("/api/teams/all-spots");
     const data = await response.json();
     setAllSpots(data.spots || []);
   }, []);
 
+  // Initial data fetching
   useEffect(() => {
     fetchTeams();
     fetchUserSpots();
     fetchAllSpots();
   }, [fetchTeams, fetchAllSpots, fetchUserSpots]);
 
+  // Helper function to get spot name by ID
   const getSpotName = (spotId: string) => {
     const spot = allSpots.find((s) => s.spotId === spotId);
     return spot?.name || "Unknown";
   };
 
+  // Add entry to initial whitelist
+  const addInitialWhitelistEntry = () => {
+    if (!whitelistEntry) {
+      toast({
+        title: "Error",
+        description: "Please enter an email or full name to whitelist",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (initialWhitelist.some((entry) => entry.toLowerCase() === whitelistEntry.toLowerCase())) {
+      toast({
+        title: "Error",
+        description: `${whitelistEntry} is already in the whitelist`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setInitialWhitelist((prev) => [...prev, whitelistEntry]);
+    setWhitelistEntry("");
+    toast({
+      title: "Success",
+      description: `Added ${whitelistEntry} to whitelist`,
+    });
+  };
+
+  // Remove entry from initial whitelist
+  const removeInitialWhitelistEntry = (entry: string) => {
+    setInitialWhitelist((prev) => prev.filter((e) => e !== entry));
+    toast({
+      title: "Success",
+      description: `Removed ${entry} from whitelist`,
+    });
+  };
+
+  // Create a new team
   const createTeam = async () => {
     if (selectedSpots.length === 0) {
       toast({
@@ -117,6 +165,16 @@ export default function TeamManagement() {
       });
       return;
     }
+
+    if (isPrivate && selectedSpots.length + initialWhitelist.length !== 4) {
+      toast({
+        title: "Error",
+        description: "A private team must have exactly 4 spots reserved (selected spots + whitelisted entries).",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const response = await fetch("/api/teams", {
       method: "POST",
       body: JSON.stringify({
@@ -124,6 +182,7 @@ export default function TeamManagement() {
         isPrivate,
         creatorId: user?.id,
         initialSpots: selectedSpots,
+        whitelist: isPrivate ? initialWhitelist : [],
       }),
       headers: { "Content-Type": "application/json" },
     });
@@ -134,20 +193,24 @@ export default function TeamManagement() {
       setNewTeamName("");
       setIsPrivate(false);
       setSelectedSpots([]);
+      setInitialWhitelist([]);
+      setWhitelistEntry("");
       setIsCreateDialogOpen(false);
       toast({
         title: "Success",
         description: `Team "${newTeamName}" created successfully!`,
       });
     } else {
+      const error = await response.json();
       toast({
         title: "Error",
-        description: "Failed to create team",
+        description: error.error || "Failed to create team",
         variant: "destructive",
       });
     }
   };
 
+  // Add spots to an existing team
   const addSpotToTeam = async () => {
     if (!joinTeam || selectedJoinSpots.length === 0) {
       toast({
@@ -158,10 +221,11 @@ export default function TeamManagement() {
       return;
     }
 
-    if (joinTeam.members.length + selectedJoinSpots.length > 4) {
+    const maxCapacity = joinTeam.isPrivate ? 4 - joinTeam.whitelist.length + 1 : 4;
+    if (joinTeam.members.length + selectedJoinSpots.length > maxCapacity) {
       toast({
         title: "Error",
-        description: "Cannot exceed 4 total members in the team",
+        description: `Cannot exceed ${maxCapacity} total members in the team`,
         variant: "destructive",
       });
       return;
@@ -196,8 +260,8 @@ export default function TeamManagement() {
     });
   };
 
+  // Remove a spot from a team
   const removeSpotFromTeam = async (teamId: string, spotId: string) => {
-    console.log(`Removing spot ${spotId} from team ${teamId} for user ${user?.id}`);
     const response = await fetch("/api/teams", {
       method: "PATCH",
       body: JSON.stringify({ teamId, spotId, userId: user?.id }),
@@ -213,7 +277,6 @@ export default function TeamManagement() {
       });
     } else {
       const error = await response.json();
-      console.error(`Failed to remove spot: ${error.error}`);
       toast({
         title: "Error",
         description: error.error || "Failed to remove spot from team",
@@ -222,6 +285,7 @@ export default function TeamManagement() {
     }
   };
 
+  // Add a user to the whitelist during editing
   const whitelistUser = (teamId: string) => {
     if (!whitelistEntry) {
       toast({
@@ -249,6 +313,7 @@ export default function TeamManagement() {
     });
   };
 
+  // Remove a user from the whitelist during editing
   const removeWhitelistedEmail = (teamId: string, entry: string) => {
     setEditWhitelist((prev) => prev.filter((e) => e !== entry));
     toast({
@@ -257,16 +322,9 @@ export default function TeamManagement() {
     });
   };
 
+  // Submit team edits
   const submitTeamEdits = async () => {
     if (!selectedTeam) return;
-
-    console.log("Submitting edits:", {
-      teamId: selectedTeam._id,
-      userId: user?.id,
-      isPrivate: editIsPrivate,
-      name: editTeamName,
-      whitelist: editWhitelist,
-    });
 
     const response = await fetch("/api/teams", {
       method: "PUT",
@@ -306,22 +364,27 @@ export default function TeamManagement() {
     }
   };
 
+  // Toggle spot selection for creating a team
   const toggleSpotSelection = (spotId: string) => {
     setSelectedSpots((prev) => (prev.includes(spotId) ? prev.filter((id) => id !== spotId) : [...prev, spotId]));
   };
 
+  // Toggle spot selection for joining a team
   const toggleJoinSpotSelection = (spotId: string) => {
     if (!joinTeam) return;
-    const remainingCapacity = 4 - joinTeam.members.length;
+    const maxCapacity = joinTeam.isPrivate ? 4 - joinTeam.whitelist.length + 1 : 4;
+    const remainingCapacity = maxCapacity - joinTeam.members.length;
     setSelectedJoinSpots((prev) => (prev.includes(spotId) ? prev.filter((id) => id !== spotId) : prev.length < remainingCapacity ? [...prev, spotId] : prev));
   };
 
+  // Filter teams based on search term
   const filteredTeams = teams.filter((team) => {
     const teamNameMatch = team.name.toLowerCase().includes(searchTerm.toLowerCase());
     const memberNameMatch = team.members.some((member) => getSpotName(member.spotId).toLowerCase().includes(searchTerm.toLowerCase()));
     return teamNameMatch || memberNameMatch;
   });
 
+  // Check if user is whitelisted for a private team
   const isWhitelisted = (team: Team) => {
     const availableSpots = userSpots.filter((s) => !teams.some((t) => t.members.some((m) => m.spotId === s.spotId)));
     return availableSpots.some((spot) => {
@@ -331,6 +394,7 @@ export default function TeamManagement() {
     });
   };
 
+  // Open edit dialog with team details
   const openEditDialog = (team: Team) => {
     setSelectedTeam(team);
     setEditIsPrivate(team.isPrivate);
@@ -340,11 +404,13 @@ export default function TeamManagement() {
     setIsEditDialogOpen(true);
   };
 
+  // Open join dialog for a team
   const openJoinDialog = (team: Team) => {
     setJoinTeam(team);
     setSelectedJoinSpots([]);
   };
 
+  // Calculate if there are any modified changes
   const modifiedChanges =
     (selectedTeam && editTeamName !== selectedTeam.name ? 1 : 0) +
     (selectedTeam && editIsPrivate !== selectedTeam.isPrivate ? 1 : 0) +
@@ -360,7 +426,7 @@ export default function TeamManagement() {
         </div>
       </section>
 
-      <div className="container mx-auto px-4 py-4 sm:py-8 min-h-screen">
+      <div className="container px-4 py-4 sm:py-8 min-h-screen sm:w-[65%] mx-auto">
         <Alert className="mb-4 bg-secondary">
           <CircleAlert className="h-4 w-4" />
           <AlertTitle>Register Your Players</AlertTitle>
@@ -393,6 +459,39 @@ export default function TeamManagement() {
                         Private Team
                       </Label>
                     </div>
+                    {isPrivate && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg sm:text-xl font-semibold text-primary">Manage Whitelist</h3>
+                        <div className="space-y-2">
+                          <Label className="text-sm sm:text-base">Whitelisted Emails or Names</Label>
+                          {initialWhitelist.length > 0 ? (
+                            <ul className="list-disc pl-5 space-y-1">
+                              {initialWhitelist.map((entry) => (
+                                <li key={entry} className="text-foreground">
+                                  {entry}
+                                  <Button variant="link" className="ml-2 text-red-500 hover:text-red-700 text-xs sm:text-sm" onClick={() => removeInitialWhitelistEntry(entry)}>
+                                    Remove
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm sm:text-base text-muted-foreground">No whitelisted entries yet.</p>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            placeholder="Enter email or full name to whitelist"
+                            value={whitelistEntry}
+                            onChange={(e) => setWhitelistEntry(e.target.value)}
+                            className="w-full text-sm sm:text-base mt-1"
+                          />
+                          <Button onClick={addInitialWhitelistEntry} className="bg-green-500 hover:bg-green-600 text-white text-sm sm:text-base py-1 sm:py-2">
+                            Add
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label className="text-sm sm:text-base">Select Initial Spots</Label>
                       {userSpots
@@ -427,7 +526,7 @@ export default function TeamManagement() {
                 className="w-full text-sm sm:text-base mt-1"
               />
             </div>
-            {/* Accordion for mobile, Table for desktop */}
+            {/* Accordion for mobile */}
             <div className="sm:hidden space-y-4">
               {filteredTeams.map((team) => (
                 <details key={team._id} className="border rounded-lg overflow-hidden" open={openTeamId === team._id} onToggle={(e) => setOpenTeamId(e.currentTarget.open ? team._id : null)}>
@@ -437,8 +536,7 @@ export default function TeamManagement() {
                   </summary>
                   <div className="p-4 bg-white space-y-2">
                     <p className="text-sm sm:text-base">
-                      <strong>Type:</strong>
-                      <p>{team.isPrivate ? "Private" : "Public"}</p>
+                      <strong>Type:</strong> {team.isPrivate ? "Private" : "Public"}
                     </p>
                     <div className="text-sm sm:text-base">
                       <strong>Members:</strong>
@@ -461,7 +559,11 @@ export default function TeamManagement() {
                           <Button
                             variant="outline"
                             className="text-xs sm:text-sm px-2 py-1 sm:px-4 sm:py-2 w-full sm:w-auto"
-                            disabled={!userSpots.some((s) => !teams.some((t) => t.members.some((m) => m.spotId === s.spotId))) || team.members.length >= 4 || (team.isPrivate && !isWhitelisted(team))}>
+                            disabled={
+                              !userSpots.some((s) => !teams.some((t) => t.members.some((m) => m.spotId === s.spotId))) ||
+                              (team.isPrivate ? team.members.length >= 4 - team.whitelist.length + 1 : team.members.length >= 4) ||
+                              (team.isPrivate && !isWhitelisted(team))
+                            }>
                             Join
                           </Button>
                         </DialogTrigger>
@@ -471,7 +573,10 @@ export default function TeamManagement() {
                           </DialogHeader>
                           <div className="space-y-4">
                             <div className="space-y-2">
-                              <Label className="text-sm sm:text-base">Select Reservations (Max {joinTeam ? 4 - joinTeam.members.length - selectedJoinSpots.length : 0} more)</Label>
+                              <Label className="text-sm sm:text-base">
+                                Select Reservations (Max{" "}
+                                {joinTeam ? (joinTeam.isPrivate ? 4 - joinTeam.whitelist.length + 1 - joinTeam.members.length : 4 - joinTeam.members.length - selectedJoinSpots.length) : 0} more)
+                              </Label>
                               {userSpots
                                 .filter((spot) => !teams.some((t) => t.members.some((m) => m.spotId === spot.spotId)))
                                 .map((spot) => (
@@ -479,7 +584,10 @@ export default function TeamManagement() {
                                     <Checkbox
                                       checked={selectedJoinSpots.includes(spot.spotId)}
                                       onCheckedChange={() => toggleJoinSpotSelection(spot.spotId)}
-                                      disabled={!selectedJoinSpots.includes(spot.spotId) && selectedJoinSpots.length >= (joinTeam ? 4 - joinTeam.members.length : 0)}
+                                      disabled={
+                                        !selectedJoinSpots.includes(spot.spotId) &&
+                                        selectedJoinSpots.length >= (joinTeam ? (joinTeam.isPrivate ? 4 - joinTeam.whitelist.length + 1 - joinTeam.members.length : 4 - joinTeam.members.length) : 0)
+                                      }
                                     />
                                     <Label className="text-sm sm:text-base">{spot.name}</Label>
                                   </div>
@@ -496,9 +604,7 @@ export default function TeamManagement() {
                           open={isEditDialogOpen}
                           onOpenChange={(open) => {
                             setIsEditDialogOpen(open);
-                            if (!open) {
-                              setSelectedTeam(null);
-                            }
+                            if (!open) setSelectedTeam(null);
                           }}>
                           <DialogTrigger asChild>
                             <Button variant="outline" className="text-xs sm:text-sm px-2 py-1 sm:px-4 sm:py-2 w-full sm:w-auto" onClick={() => openEditDialog(team)}>
@@ -507,7 +613,6 @@ export default function TeamManagement() {
                           </DialogTrigger>
                           <DialogContent>
                             <div className="space-y-6">
-                              {/* Team Details Section */}
                               <div className="space-y-4">
                                 <h3 className="text-lg sm:text-xl font-semibold text-primary">Team Details</h3>
                                 <div className="space-y-2">
@@ -529,7 +634,6 @@ export default function TeamManagement() {
                                   </Label>
                                 </div>
                               </div>
-                              {/* Whitelist Section (if private) */}
                               {editIsPrivate && (
                                 <div className="space-y-4">
                                   <h3 className="text-lg sm:text-xl font-semibold text-primary">Manage Whitelist</h3>
@@ -566,7 +670,6 @@ export default function TeamManagement() {
                                   </div>
                                 </div>
                               )}
-                              {/* Submit Changes Button */}
                               <Button
                                 onClick={submitTeamEdits}
                                 disabled={modifiedChanges === 0}
@@ -622,7 +725,9 @@ export default function TeamManagement() {
                                 variant="outline"
                                 className="text-xs sm:text-sm px-2 py-1 sm:px-4 sm:py-2"
                                 disabled={
-                                  !userSpots.some((s) => !teams.some((t) => t.members.some((m) => m.spotId === s.spotId))) || team.members.length >= 4 || (team.isPrivate && !isWhitelisted(team))
+                                  !userSpots.some((s) => !teams.some((t) => t.members.some((m) => m.spotId === s.spotId))) ||
+                                  (team.isPrivate ? team.members.length >= 4 - team.whitelist.length + 1 : team.members.length >= 4) ||
+                                  (team.isPrivate && !isWhitelisted(team))
                                 }>
                                 Join
                               </Button>
@@ -633,7 +738,10 @@ export default function TeamManagement() {
                               </DialogHeader>
                               <div className="space-y-4">
                                 <div className="space-y-2">
-                                  <Label className="text-sm sm:text-base">Select Reservations (Max {joinTeam ? 4 - joinTeam.members.length - selectedJoinSpots.length : 0} more)</Label>
+                                  <Label className="text-sm sm:text-base">
+                                    Select Reservations (Max{" "}
+                                    {joinTeam ? (joinTeam.isPrivate ? 4 - joinTeam.whitelist.length + 1 - joinTeam.members.length : 4 - joinTeam.members.length - selectedJoinSpots.length) : 0} more)
+                                  </Label>
                                   {userSpots
                                     .filter((spot) => !teams.some((t) => t.members.some((m) => m.spotId === spot.spotId)))
                                     .map((spot) => (
@@ -641,7 +749,11 @@ export default function TeamManagement() {
                                         <Checkbox
                                           checked={selectedJoinSpots.includes(spot.spotId)}
                                           onCheckedChange={() => toggleJoinSpotSelection(spot.spotId)}
-                                          disabled={!selectedJoinSpots.includes(spot.spotId) && selectedJoinSpots.length >= (joinTeam ? 4 - joinTeam.members.length : 0)}
+                                          disabled={
+                                            !selectedJoinSpots.includes(spot.spotId) &&
+                                            selectedJoinSpots.length >=
+                                              (joinTeam ? (joinTeam.isPrivate ? 4 - joinTeam.whitelist.length + 1 - joinTeam.members.length : 4 - joinTeam.members.length) : 0)
+                                          }
                                         />
                                         <Label className="text-sm sm:text-base">{spot.name}</Label>
                                       </div>
@@ -658,9 +770,7 @@ export default function TeamManagement() {
                               open={isEditDialogOpen}
                               onOpenChange={(open) => {
                                 setIsEditDialogOpen(open);
-                                if (!open) {
-                                  setSelectedTeam(null);
-                                }
+                                if (!open) setSelectedTeam(null);
                               }}>
                               <DialogTrigger asChild>
                                 <Button variant="outline" className="text-xs sm:text-sm px-2 py-1 sm:px-4 sm:py-2" onClick={() => openEditDialog(team)}>
@@ -669,7 +779,6 @@ export default function TeamManagement() {
                               </DialogTrigger>
                               <DialogContent>
                                 <div className="space-y-6">
-                                  {/* Team Details Section */}
                                   <div className="space-y-4">
                                     <h3 className="text-lg sm:text-xl font-semibold text-primary">Team Details</h3>
                                     <div className="space-y-2">
@@ -691,7 +800,6 @@ export default function TeamManagement() {
                                       </Label>
                                     </div>
                                   </div>
-                                  {/* Whitelist Section (if private) */}
                                   {editIsPrivate && (
                                     <div className="space-y-4">
                                       <h3 className="text-lg sm:text-xl font-semibold text-primary">Manage Whitelist</h3>
@@ -728,7 +836,6 @@ export default function TeamManagement() {
                                       </div>
                                     </div>
                                   )}
-                                  {/* Submit Changes Button */}
                                   <Button
                                     onClick={submitTeamEdits}
                                     disabled={modifiedChanges === 0}

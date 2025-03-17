@@ -7,6 +7,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { SignInButton, SignUpButton, SignedIn, SignedOut } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CircleAlert } from "lucide-react";
 
 export default function Home() {
   const images = [
@@ -66,6 +68,29 @@ export default function Home() {
       {/* About Section */}
       <section className="py-8 sm:py-12 w-full sm:w-[65%] mx-auto">
         <div className="container mx-auto px-4">
+          <Alert className="mb-4 bg-secondary">
+            <CircleAlert className="h-4 w-4" />
+            <AlertTitle className="font">READ ME: Geting Started</AlertTitle>
+            <AlertDescription className="pt-2">
+              Here’s what you need to know:
+              <ul className="list-disc pl-5 pt-2 space-y-2">
+                {" "}
+                <li>
+                  <span className="font-bold">If you know your four golfing partners:</span> You can create a <span className="italic">private team</span> just for your group. When setting up a
+                  private team, you can <span className="italic">whitelist</span> your team by adding the names or emails of your friends, so only they can join. <br /> &nbsp;&nbsp;&nbsp;&nbsp;
+                  <span className="font-bold">Important:</span> You should only make a team private if you’re reserving all four spots.{" "}
+                </li>{" "}
+                <li>
+                  <span className="font-bold">If you’re signing up with fewer than four people (like a duo or trio):</span> You can either create a <span className="italic">public team</span> that
+                  others can join, or join an existing public team to fill out the group. This way, everyone gets to enjoy the day on the course!{" "}
+                </li>{" "}
+                <li>
+                  <span className="font-bold">Need help?</span> If you run into any trouble or have questions, don’t hesitate to give Vinny a call at 630-967-4286—he’s happy to help you get set up.{" "}
+                </li>{" "}
+              </ul>{" "}
+              <br /> Let’s get ready for a great golf outing!
+            </AlertDescription>
+          </Alert>
           <Card>
             <CardHeader>
               <CardTitle className="text-xl sm:text-3xl font-bold text-primary text-center">44th Annual GVSU Football Alumni Golf Outing</CardTitle>
@@ -100,12 +125,28 @@ export default function Home() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center">
-                <Button asChild className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3 bg-primary hover:bg-accent">
-                  <Link href="/register">Register Today</Link>
-                </Button>
-                <Button asChild variant="outline" className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3">
-                  <Link href="/sponsor">Sponsor a Hole</Link>
-                </Button>
+                <SignedOut>
+                  <div className="space-x-2 sm:space-x-4">
+                    <SignInButton mode="modal">
+                      <Button className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3 bg-primary hover:bg-accent">Sign In</Button>
+                    </SignInButton>
+                    <SignUpButton mode="modal" redirectUrl="/register">
+                      <Button variant="outline" className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3">
+                        Sign Up
+                      </Button>
+                    </SignUpButton>
+                  </div>
+                </SignedOut>
+                <SignedIn>
+                  <div className="flex flex-row gap-2 sm:gap-6">
+                    <Button className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3 bg-primary hover:bg-accent">
+                      <Link href="/register">Register Now</Link>
+                    </Button>
+                    <Button className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3 hover:bg-secondary hover:text-secondary-foreground bg-secondary-foreground text-secondary">
+                      <Link href="/sponsor">Sponsor a Hole</Link>
+                    </Button>
+                  </div>
+                </SignedIn>
               </div>
 
               <Separator className="my-2" />

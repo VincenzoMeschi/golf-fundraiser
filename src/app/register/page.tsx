@@ -13,6 +13,7 @@ import Image from "next/image";
 import { useToast } from "@/components/ui/use-toast";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/dist/client/link";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type SpotDetails = {
   spotId?: string;
@@ -67,14 +68,14 @@ export default function Register() {
   useEffect(() => {
     if (user) {
       fetchPurchasedSpots();
-      initialPurchasedSpotsRef.current = [...purchasedSpots]; // Store initial state
+      initialPurchasedSpotsRef.current = [...purchasedSpots];
     }
   }, [user, fetchPurchasedSpots]);
 
   useEffect(() => {
     if (searchParams.get("success") === "true" && user) {
       setLoading(true);
-      initialPurchasedSpotsRef.current = [...purchasedSpots]; // Reset initial state on payment success
+      initialPurchasedSpotsRef.current = [...purchasedSpots];
       const interval = setInterval(() => {
         fetchPurchasedSpots(true);
       }, 1000);
@@ -89,33 +90,44 @@ export default function Register() {
     validateForm(index, value, field);
   };
 
-  const handleSpotsChange = (value: number) => {
-    const newTotal = totalSpots + value;
+  const handleSpotsChange = (value: string) => {
+    const parsedValue = parseInt(value);
+    const newTotal = totalSpots + parsedValue;
     if (newTotal > 4) {
       toast({
         title: "Error",
-        description: `Cannot add ${value} spot(s). You already have ${totalSpots}, and the maximum is 4.`,
+        description: `Cannot add ${parsedValue} spot(s). You already have ${totalSpots}, and the maximum is 4.`,
         variant: "destructive",
       });
       return;
     }
-    setSpots(value);
+    setSpots(parsedValue);
     const newSpotDetails = [...spotDetails];
-    if (value > newSpotDetails.length) {
-      for (let i = newSpotDetails.length; i < value; i++) {
+    if (parsedValue > newSpotDetails.length) {
+      // Add new spot details
+      for (let i = newSpotDetails.length; i < parsedValue; i++) {
         newSpotDetails.push({ name: "", phone: "", email: "" });
       }
-      setValidationErrors((prev) => [...prev, { name: "", phone: "", email: "" }]);
+      // Add corresponding validation error entries
+      setValidationErrors((prev) => {
+        const newErrors = [...prev];
+        for (let i = prev.length; i < parsedValue; i++) {
+          newErrors.push({ name: "", phone: "", email: "" });
+        }
+        console.log("Updated validationErrors (increase):", newErrors);
+        return newErrors;
+      });
     } else {
-      newSpotDetails.length = value;
-      const newErrors = validationErrors.slice(0, value).map(() => ({
-        name: "",
-        phone: "",
-        email: "",
-      }));
-      setValidationErrors(newErrors);
+      // Trim spot details and validation errors
+      newSpotDetails.length = parsedValue;
+      setValidationErrors((prev) => {
+        const newErrors = prev.slice(0, parsedValue);
+        console.log("Updated validationErrors (decrease):", newErrors);
+        return newErrors;
+      });
     }
     setSpotDetails(newSpotDetails);
+    console.log("Updated spotDetails:", newSpotDetails);
   };
 
   const validateForm = (index: number, value: string, field: keyof SpotDetails) => {
@@ -138,13 +150,14 @@ export default function Register() {
         break;
     }
     setValidationErrors(errors);
+    console.log("Validation errors after update:", errors);
   };
 
   const isFormValid = () => {
     return (
       spotDetails.every((spot, index) => {
         const { name, phone, email } = spot;
-        const { name: nameError, phone: phoneError, email: emailError } = validationErrors[index];
+        const { name: nameError, phone: phoneError, email: emailError } = validationErrors[index] || {};
         return !nameError && !phoneError && !emailError && name && phone && email;
       }) && donation >= 150
     );
@@ -238,6 +251,9 @@ export default function Register() {
     return nameMatch || phoneMatch || emailMatch;
   });
 
+  // Calculate the maximum selectable spots based on remaining capacity
+  const maxSpots = 4 - totalSpots;
+
   return (
     <div className="bg-background">
       {/* Hero Section with Background Image */}
@@ -266,17 +282,20 @@ export default function Register() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                   <div>
                     <Label htmlFor="spots" className="text-sm sm:text-base">
-                      Number of Players <span className="text-xs sm:text-sm text-muted-foreground pl-1">({4 - totalSpots} Remaining)</span>
+                      Number of Players <span className="text-xs sm:text-sm text-muted-foreground pl-1">({maxSpots} Remaining)</span>
                     </Label>
-                    <Input
-                      id="spots"
-                      type="number"
-                      min={1}
-                      max={4 - totalSpots}
-                      value={spots}
-                      onChange={(e) => handleSpotsChange(parseInt(e.target.value))}
-                      className="w-full text-sm sm:text-base mt-1"
-                    />
+                    <Select onValueChange={handleSpotsChange} value={spots.toString()}>
+                      <SelectTrigger id="spots" className="w-full text-sm sm:text-base mt-1">
+                        <SelectValue placeholder="Select number of players" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4].map((num) => (
+                          <SelectItem key={num} value={num.toString()} disabled={num > maxSpots}>
+                            {num}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <p className="text-xs sm:text-sm text-muted-foreground mt-1">Number of spots you would like to purchase</p>
                   </div>
                   <div>
@@ -303,7 +322,7 @@ export default function Register() {
                             placeholder="John Doe"
                             className="w-full text-sm sm:text-base mt-1"
                           />
-                          {validationErrors[index].name && <p className="text-xs text-red-500 mt-1">{validationErrors[index].name}</p>}
+                          {validationErrors[index]?.name && <p className="text-xs text-red-500 mt-1">{validationErrors[index].name}</p>}
                         </div>
                         <div>
                           <Label htmlFor={`phone-${index}`} className="text-sm sm:text-base">
@@ -317,9 +336,8 @@ export default function Register() {
                             maxLength={12}
                             className="w-full text-sm sm:text-base mt-1"
                           />
-                          {validationErrors[index].phone && <p className="text-xs text-red-500 mt-1">{validationErrors[index].phone}</p>}
+                          {validationErrors[index]?.phone && <p className="text-xs text-red-500 mt-1">{validationErrors[index].phone}</p>}
                         </div>
-
                         <div className="sm:col-span-1">
                           <Label htmlFor={`email-${index}`} className="text-sm sm:text-base">
                             Email
@@ -332,7 +350,7 @@ export default function Register() {
                             placeholder="Email"
                             className="w-full text-sm sm:text-base mt-1"
                           />
-                          {validationErrors[index].email && <p className="text-xs text-red-500 mt-1">{validationErrors[index].email}</p>}
+                          {validationErrors[index]?.email && <p className="text-xs text-red-500 mt-1">{validationErrors[index].email}</p>}
                         </div>
                       </div>
                     </div>
