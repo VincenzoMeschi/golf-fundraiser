@@ -70,7 +70,7 @@ export default function Register() {
       fetchPurchasedSpots();
       initialPurchasedSpotsRef.current = [...purchasedSpots];
     }
-  }, [user, fetchPurchasedSpots]);
+  }, [user, fetchPurchasedSpots, purchasedSpots]);
 
   useEffect(() => {
     if (searchParams.get("success") === "true" && user) {

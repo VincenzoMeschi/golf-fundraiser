@@ -1,21 +1,27 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 export default function NotFound() {
-  const router = useRouter();
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Redirect to home page after 3 seconds
+  // Set mounted state after component mounts
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Redirect to home page after 3 seconds with a full page refresh
+  useEffect(() => {
+    if (!isMounted) return; // Prevent action before mount
+
     const timer = setTimeout(() => {
-      router.push("/");
+      // Use window.location.replace to redirect with a full refresh
+      window.location.replace("/");
     }, 3000);
 
-    // Cleanup the timer on component unmount
     return () => clearTimeout(timer);
-  }, [router]);
+  }, [isMounted]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">

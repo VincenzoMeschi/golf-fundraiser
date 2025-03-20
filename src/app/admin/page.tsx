@@ -373,7 +373,13 @@ export default function AdminDashboard() {
                             <TableCell>{team.name}</TableCell>
                             <TableCell>{team.isPrivate ? "Private" : "Public"}</TableCell>
                             <TableCell>{team.creatorId}</TableCell>
-                            <TableCell>{team.members.length}/4</TableCell>
+                            <TableCell>
+                              <ul>
+                                {team.members.map((member, i) => {
+                                  return <li key={i}>{member.registrationId}</li>;
+                                })}
+                              </ul>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

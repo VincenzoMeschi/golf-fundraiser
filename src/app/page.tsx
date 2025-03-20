@@ -34,7 +34,7 @@ export default function Home() {
     <div className="min-h-screen bg-background">
       {/* Hero Section */}
       <section className="h-64 sm:h-80 relative">
-        <Image src="https://res.cloudinary.com/dazxax791/image/upload/v1742003002/bcwj55qveh68sgtw2u2i.jpg" alt="Golf Course" fill className="object-cover opacity-50" />
+        <Image priority src="https://res.cloudinary.com/dazxax791/image/upload/v1742003002/bcwj55qveh68sgtw2u2i.jpg" alt="Golf Course" fill className="object-cover opacity-50" />
         <div className="absolute flex-col inset-0 flex items-center justify-center bg-black bg-opacity-35 text-center px-4">
           <h1 className="text-2xl sm:text-4xl font-bold text-primary-foreground mb-2 sm:mb-4">Golf Outing Fundraiser</h1>
           <p className="text-sm sm:text-base text-muted text-center max-w-xs sm:max-w-md mx-auto mb-4 sm:mb-6">
@@ -42,14 +42,14 @@ export default function Home() {
           </p>
           <SignedOut>
             <div className="space-x-2 sm:space-x-4">
-              <SignInButton mode="modal">
-                <Button className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3 bg-primary hover:bg-accent">Sign In</Button>
-              </SignInButton>
               <SignUpButton mode="modal" redirectUrl="/register">
-                <Button variant="outline" className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3">
-                  Sign Up
-                </Button>
+                <Button className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3 bg-primary hover:bg-accent">Sign Up</Button>
               </SignUpButton>
+              <SignInButton mode="modal">
+                <Button variant="outline" className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3">
+                  Sign In
+                </Button>
+              </SignInButton>
             </div>
           </SignedOut>
           <SignedIn>
@@ -127,14 +127,14 @@ export default function Home() {
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center">
                 <SignedOut>
                   <div className="space-x-2 sm:space-x-4">
-                    <SignInButton mode="modal">
-                      <Button className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3 bg-primary hover:bg-accent">Sign In</Button>
-                    </SignInButton>
                     <SignUpButton mode="modal" redirectUrl="/register">
-                      <Button variant="outline" className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3">
-                        Sign Up
-                      </Button>
+                      <Button className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3 bg-primary hover:bg-accent">Sign Up</Button>
                     </SignUpButton>
+                    <SignInButton mode="modal">
+                      <Button variant="outline" className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3">
+                        Sign In
+                      </Button>
+                    </SignInButton>
                   </div>
                 </SignedOut>
                 <SignedIn>
@@ -234,9 +234,9 @@ export default function Home() {
 
       {/* Gallery Section */}
       <section className="py-8 sm:py-12">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto sm:w-[65%] px-4">
           <h2 className="text-xl sm:text-3xl font-bold text-primary mb-4 sm:mb-8 text-center">Event Highlights</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             {images.map((image) => (
               <div key={image.title} className="relative aspect-video rounded-lg overflow-hidden shadow-md">
                 <Image src={image.url} alt={image.title} fill className="object-cover" />

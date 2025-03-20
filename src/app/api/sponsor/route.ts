@@ -20,12 +20,16 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Create a new sponsor
+// POST: Create a new sponsor (called after Stripe payment)
 export async function POST(request: Request) {
-  const { userId, name, price, logo, websiteLink } = await request.json();
+  const { userId, name, price, logo, text, websiteLink } = await request.json();
 
-  if (!userId || !name || !price || !logo || !websiteLink) {
-    return NextResponse.json({ error: "All fields are required" }, { status: 400 });
+  if (!userId || !name || !price) {
+    return NextResponse.json({ error: "User ID, name, and price are required" }, { status: 400 });
+  }
+
+  if (!logo && !text) {
+    return NextResponse.json({ error: "At least one of logo or text must be provided" }, { status: 400 });
   }
 
   if (price < 200) {
@@ -39,15 +43,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User already has a sponsor" }, { status: 400 });
     }
 
-    const result = await db.collection("sponsors").insertOne({
-      userId,
-      name,
-      price,
-      logo,
-      websiteLink,
-      createdAt: new Date(),
-    });
+    const sponsorData = { userId, name, price, createdAt: new Date() };
+    if (logo) sponsorData.logo = logo;
+    if (text) sponsorData.text = text;
+    if (websiteLink) sponsorData.websiteLink = websiteLink;
 
+    const result = await db.collection("sponsors").insertOne(sponsorData);
     return NextResponse.json({ success: true, sponsorId: result.insertedId });
   } catch (err) {
     console.error(`Error in POST /api/sponsor: ${err}`);
@@ -57,28 +58,39 @@ export async function POST(request: Request) {
 
 // PUT: Update an existing sponsor
 export async function PUT(request: Request) {
-  const { userId, name, price, logo, websiteLink } = await request.json();
+  const { userId, name, logo, text, websiteLink } = await request.json();
 
-  if (!userId || !name || !price || !logo || !websiteLink) {
-    return NextResponse.json({ error: "All fields are required" }, { status: 400 });
+  if (!userId || !name) {
+    return NextResponse.json({ error: "User ID and name are required" }, { status: 400 });
   }
 
-  if (price < 200) {
-    return NextResponse.json({ error: "Price must be at least $200" }, { status: 400 });
+  if (!logo && !text) {
+    return NextResponse.json({ error: "At least one of logo or text must be provided" }, { status: 400 });
   }
 
   try {
     const { db } = await connectToDatabase();
+
+    // Build the $set object with only defined fields
+    const updateData: { [key: string]: any } = {
+      name,
+      updatedAt: new Date(),
+    };
+    if (logo) updateData.logo = logo;
+    if (text) updateData.text = text;
+    if (websiteLink) updateData.websiteLink = websiteLink;
+
+    // Build the $unset object for fields that are undefined or empty
+    const unsetData: { [key: string]: string } = {};
+    if (!logo) unsetData.logo = "";
+    if (!text) unsetData.text = "";
+    if (!websiteLink) unsetData.websiteLink = "";
+
     const result = await db.collection("sponsors").updateOne(
       { userId },
       {
-        $set: {
-          name,
-          price,
-          logo,
-          websiteLink,
-          updatedAt: new Date(),
-        },
+        $set: updateData,
+        ...(Object.keys(unsetData).length > 0 ? { $unset: unsetData } : {}),
       }
     );
 

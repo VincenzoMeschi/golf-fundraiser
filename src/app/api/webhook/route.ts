@@ -1,4 +1,3 @@
-// /app/api/webhook/route.ts
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { connectToDatabase } from "@/lib/mongodb";
@@ -63,6 +62,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: "Invalid spotDetails format" }, { status: 400 });
         }
 
+        // Check for existing emails across all registrations
         const existingEmails = await db
           .collection("registrations")
           .aggregate([{ $unwind: "$spotDetails" }, { $group: { _id: "$spotDetails.email" } }])
@@ -82,9 +82,35 @@ export async function POST(request: Request) {
           spotId: new ObjectId().toString(),
           ...detail,
         }));
-        console.log("Spots with IDs to insert:", spotsWithIds);
+        console.log("Spots with IDs to process:", spotsWithIds);
 
-        try {
+        // Check if a registration already exists for this user
+        const existingRegistration = await db.collection("registrations").findOne({
+          userId,
+          paymentStatus: "completed",
+        });
+
+        if (existingRegistration) {
+          // Update existing registration: append to spotDetails and increment spots
+          const updateResult = await db.collection("registrations").updateOne(
+            { _id: existingRegistration._id },
+            {
+              $push: { spotDetails: { $each: spotsWithIds } }, // Append new spots to array
+              $inc: { spots: spots }, // Increment the spots count
+              $set: {
+                amount: (existingRegistration.amount || 0) + session.amount_total / 100, // Add new payment amount
+                stripeSessionId: session.id, // Update to latest session ID (or consider storing an array of session IDs)
+              },
+            }
+          );
+
+          if (updateResult.modifiedCount === 0) {
+            console.error("Failed to update existing registration");
+            return NextResponse.json({ error: "Failed to update registration" }, { status: 500 });
+          }
+          console.log("Updated existing registration with ID:", existingRegistration._id);
+        } else {
+          // Create new registration if none exists
           const insertResult = await db.collection("registrations").insertOne({
             userId,
             spots,
@@ -94,14 +120,11 @@ export async function POST(request: Request) {
             createdAt: new Date(),
             stripeSessionId: session.id,
           });
-          console.log("Inserted registration with ID:", insertResult.insertedId);
-        } catch (err) {
-          console.error("Failed to insert registration:", err);
-          return NextResponse.json({ error: "Failed to save registration" }, { status: 500 });
+          console.log("Inserted new registration with ID:", insertResult.insertedId);
         }
       }
 
-      // Handle sponsorship payments
+      // Handle sponsorship payments (unchanged)
       if (session.metadata.type === "sponsorship") {
         console.log("Processing sponsorship payment for user:", userId);
         const { businessName, signOption, signText, logoUrl } = session.metadata;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUser, SignedIn, SignedOut, RedirectToSignIn } from "@clerk/nextjs";
 import { Card } from "@/components/ui/card";
 import TeamManagement from "@/components/TeamManagement/TeamManagement";
@@ -10,13 +10,7 @@ export default function Teams() {
   const [hasSpots, setHasSpots] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) {
-      checkSpotPurchase();
-    }
-  }, [user]);
-
-  const checkSpotPurchase = async () => {
+  const checkSpotPurchase = useCallback(async () => {
     setLoading(true);
     const response = await fetch("/api/teams/check-spots", {
       method: "POST",
@@ -26,7 +20,13 @@ export default function Teams() {
     const data = await response.json();
     setHasSpots(data.hasSpots);
     setLoading(false);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      checkSpotPurchase();
+    }
+  }, [user, checkSpotPurchase]);
 
   if (loading) {
     return (

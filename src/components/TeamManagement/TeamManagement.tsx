@@ -160,7 +160,7 @@ export default function TeamManagement() {
     if (selectedSpots.length === 0) {
       toast({
         title: "Error",
-        description: "Please select at least one spot to create a team",
+        description: "Please select at least one player to create a team",
         variant: "destructive",
       });
       return;
@@ -215,7 +215,7 @@ export default function TeamManagement() {
     if (!joinTeam || selectedJoinSpots.length === 0) {
       toast({
         title: "Error",
-        description: "Please select at least one spot to join the team",
+        description: "Please select at least one player to join the team",
         variant: "destructive",
       });
       return;

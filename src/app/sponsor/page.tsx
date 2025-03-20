@@ -7,27 +7,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import Image from "next/image";
 import { useToast } from "@/components/ui/use-toast";
 import { Slider } from "@/components/ui/slider";
+import { useSearchParams } from "next/navigation";
 
 type Sponsor = {
   _id: string;
   userId: string;
   name: string;
   price: number;
-  logo: string;
-  websiteLink: string;
+  logo?: string;
+  text?: string;
+  websiteLink?: string;
 };
 
 export default function Sponsor() {
   const { user } = useUser();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
   const [sponsor, setSponsor] = useState<Sponsor | null>(null);
   const [name, setName] = useState("");
   const [price, setPrice] = useState(200);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>("");
+  const [text, setText] = useState("");
   const [websiteLink, setWebsiteLink] = useState("");
   const [loading, setLoading] = useState(false);
   const [editSponsor, setEditSponsor] = useState<Sponsor | null>(null);
@@ -50,6 +55,49 @@ export default function Sponsor() {
     fetchSponsor();
   }, [fetchSponsor]);
 
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const sessionId = searchParams.get("session_id");
+    if (success && sessionId) {
+      const createSponsorAfterPayment = async () => {
+        try {
+          const response = await fetch(`/api/sponsor/retrieve-session?sessionId=${sessionId}`);
+          if (!response.ok) throw new Error("Failed to retrieve session");
+          const session = await response.json();
+          const { userId, name, price, logo, text, websiteLink } = session.metadata;
+
+          const createResponse = await fetch("/api/sponsor", {
+            method: "POST",
+            body: JSON.stringify({ userId, name, price: parseInt(price), logo, text, websiteLink }),
+            headers: { "Content-Type": "application/json" },
+          });
+
+          if (!createResponse.ok) {
+            const error = await createResponse.json();
+            throw new Error(error.error || "Failed to create sponsor");
+          }
+
+          toast({ title: "Success", description: "Sponsor created successfully!" });
+          fetchSponsor();
+          setName("");
+          setPrice(200);
+          setLogoFile(null);
+          setLogoPreview("");
+          setText("");
+          setWebsiteLink("");
+        } catch (err) {
+          console.error("Error creating sponsor after payment:", err);
+          toast({
+            title: "Error",
+            description: err.message || "Failed to create sponsor after payment",
+            variant: "destructive",
+          });
+        }
+      };
+      createSponsorAfterPayment();
+    }
+  }, [searchParams, fetchSponsor, toast]);
+
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -59,14 +107,26 @@ export default function Sponsor() {
         setLogoPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+    } else {
+      setLogoFile(null);
+      setLogoPreview("");
     }
   };
 
   const handleSubmit = async () => {
-    if (!name || !price || !logoFile || !websiteLink) {
+    if (!name || !price) {
       toast({
         title: "Error",
-        description: "All fields are required",
+        description: "Name and price are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!logoFile && !text) {
+      toast({
+        title: "Error",
+        description: "At least one of logo or text must be provided",
         variant: "destructive",
       });
       return;
@@ -83,53 +143,45 @@ export default function Sponsor() {
 
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", logoFile);
-      formData.append("upload_preset", "golf_fundraiser");
-
-      const uploadResponse = await fetch("https://api.cloudinary.com/v1_1/dazxax791/image/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const uploadData = await uploadResponse.json();
-      if (!uploadData.secure_url) {
-        throw new Error("Failed to upload logo");
+      let logoUrl = "";
+      if (logoFile) {
+        const formData = new FormData();
+        formData.append("file", logoFile);
+        formData.append("upload_preset", "golf_fundraiser");
+        const uploadResponse = await fetch("https://api.cloudinary.com/v1_1/dazxax791/image/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = await uploadResponse.json();
+        if (!uploadData.secure_url) throw new Error("Failed to upload logo");
+        logoUrl = uploadData.secure_url;
       }
 
-      const logoUrl = uploadData.secure_url;
-
-      const response = await fetch("/api/sponsor", {
+      const response = await fetch("/api/sponsor/create-checkout-session", {
         method: "POST",
         body: JSON.stringify({
+          price,
           userId: user?.id,
           name,
-          price,
-          logo: logoUrl,
-          websiteLink,
+          logo: logoUrl || undefined,
+          text: text || undefined,
+          websiteLink: websiteLink || undefined,
         }),
         headers: { "Content-Type": "application/json" },
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Failed to create sponsor");
+        throw new Error(error.error || "Failed to create checkout session");
       }
 
-      toast({
-        title: "Success",
-        description: "Sponsor created successfully!",
-      });
-      fetchSponsor();
-      setName("");
-      setPrice(200);
-      setLogoFile(null);
-      setLogoPreview("");
-      setWebsiteLink("");
+      const { url } = await response.json();
+      window.location.href = url; // Redirect to Stripe Checkout
     } catch (err) {
-      console.error("Error creating sponsor:", err);
+      console.error("Error creating checkout session:", err);
       toast({
         title: "Error",
-        description: err.message || "Failed to create sponsor",
+        description: err.message || "Failed to initiate payment",
         variant: "destructive",
       });
     } finally {
@@ -137,7 +189,7 @@ export default function Sponsor() {
     }
   };
 
-  const handleEditSponsorChange = (field: keyof Sponsor, value: string | number) => {
+  const handleEditSponsorChange = (field: keyof Sponsor, value: string) => {
     if (!editSponsor) return;
     setEditSponsor({ ...editSponsor, [field]: value });
   };
@@ -151,23 +203,26 @@ export default function Sponsor() {
         setLogoPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+    } else {
+      setLogoFile(null);
+      setLogoPreview("");
     }
   };
 
   const handleSubmitEditSponsor = async () => {
-    if (!editSponsor || !editSponsor.name || !editSponsor.price || !editSponsor.websiteLink) {
+    if (!editSponsor || !editSponsor.name) {
       toast({
         title: "Error",
-        description: "All fields are required",
+        description: "Name is required",
         variant: "destructive",
       });
       return;
     }
 
-    if (editSponsor.price < 200) {
+    if (!logoFile && !editSponsor.logo && !editSponsor.text) {
       toast({
         title: "Error",
-        description: "Price must be at least $200",
+        description: "At least one of logo or text must be provided",
         variant: "destructive",
       });
       return;
@@ -179,16 +234,13 @@ export default function Sponsor() {
       if (logoFile) {
         const formData = new FormData();
         formData.append("file", logoFile);
-        formData.append("upload_preset", "your_cloudinary_upload_preset");
-
-        const uploadResponse = await fetch("https://api.cloudinary.com/v1_1/your_cloud_name/image/upload", {
+        formData.append("upload_preset", "golf_fundraiser");
+        const uploadResponse = await fetch("https://api.cloudinary.com/v1_1/dazxax791/image/upload", {
           method: "POST",
           body: formData,
         });
         const uploadData = await uploadResponse.json();
-        if (!uploadData.secure_url) {
-          throw new Error("Failed to upload logo");
-        }
+        if (!uploadData.secure_url) throw new Error("Failed to upload logo");
         logoUrl = uploadData.secure_url;
       }
 
@@ -197,9 +249,9 @@ export default function Sponsor() {
         body: JSON.stringify({
           userId: user?.id,
           name: editSponsor.name,
-          price: editSponsor.price,
-          logo: logoUrl,
-          websiteLink: editSponsor.websiteLink,
+          logo: logoUrl || undefined,
+          text: editSponsor.text || undefined,
+          websiteLink: editSponsor.websiteLink || undefined,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -209,10 +261,7 @@ export default function Sponsor() {
         throw new Error(error.error || "Failed to update sponsor");
       }
 
-      toast({
-        title: "Success",
-        description: "Sponsor updated successfully!",
-      });
+      toast({ title: "Success", description: "Sponsor updated successfully!" });
       fetchSponsor();
       setEditSponsor(null);
       setLogoFile(null);
@@ -253,20 +302,29 @@ export default function Sponsor() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                  <div className="relative w-24 h-24 sm:w-32 sm:h-32">
-                    <Image src={sponsor.logo} alt={`${sponsor.name} logo`} fill className="object-contain" />
-                  </div>
+                  {sponsor.logo && (
+                    <div className="relative w-24 h-24 sm:w-32 sm:h-32">
+                      <Image src={sponsor.logo} alt={`${sponsor.name} logo`} fill className="object-contain" />
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <h3 className="text-lg sm:text-xl font-semibold">{sponsor.name}</h3>
+                    {sponsor.text && (
+                      <p className="text-sm sm:text-base">
+                        <strong>Text:</strong> {sponsor.text}
+                      </p>
+                    )}
                     <p className="text-sm sm:text-base">
                       <strong>Price:</strong> ${sponsor.price.toLocaleString()}
                     </p>
-                    <p className="text-sm sm:text-base">
-                      <strong>Website:</strong>{" "}
-                      <a href={sponsor.websiteLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                        {sponsor.websiteLink}
-                      </a>
-                    </p>
+                    {sponsor.websiteLink && (
+                      <p className="text-sm sm:text-base">
+                        <strong>Website:</strong>{" "}
+                        <a href={sponsor.websiteLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                          {sponsor.websiteLink}
+                        </a>
+                      </p>
+                    )}
                   </div>
                 </div>
                 <Dialog open={editSponsor !== null} onOpenChange={(open) => setEditSponsor(open ? sponsor : null)}>
@@ -293,21 +351,8 @@ export default function Sponsor() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="edit-price" className="text-sm sm:text-base">
-                          Price ($)
-                        </Label>
-                        <Input
-                          id="edit-price"
-                          type="number"
-                          value={editSponsor?.price || 200}
-                          onChange={(e) => handleEditSponsorChange("price", parseInt(e.target.value) || 200)}
-                          min={200}
-                          className="w-full text-sm sm:text-base mt-1"
-                        />
-                      </div>
-                      <div>
                         <Label htmlFor="edit-logo" className="text-sm sm:text-base">
-                          Logo
+                          Logo (optional)
                         </Label>
                         <Input id="edit-logo" type="file" accept="image/*" onChange={handleEditLogoChange} className="w-full text-sm sm:text-base mt-1" />
                         {(logoPreview || editSponsor?.logo) && (
@@ -317,8 +362,20 @@ export default function Sponsor() {
                         )}
                       </div>
                       <div>
+                        <Label htmlFor="edit-text" className="text-sm sm:text-base">
+                          Text (optional)
+                        </Label>
+                        <Textarea
+                          id="edit-text"
+                          value={editSponsor?.text || ""}
+                          onChange={(e) => handleEditSponsorChange("text", e.target.value)}
+                          placeholder="Enter a short text message (e.g., a tagline or message)"
+                          className="w-full text-sm sm:text-base mt-1"
+                        />
+                      </div>
+                      <div>
                         <Label htmlFor="edit-website" className="text-sm sm:text-base">
-                          Website Link
+                          Website Link (optional)
                         </Label>
                         <Input
                           id="edit-website"
@@ -352,18 +409,12 @@ export default function Sponsor() {
                   <Label htmlFor="price" className="text-sm sm:text-base">
                     Price ($)
                   </Label>
-                  <Slider id="price" min={200} max={1000} step={50} value={[price]} onValueChange={(value) => setPrice(value[0])} className="w-full mt-1 sm:mt-2" />
+                  <Slider id="price" min={200} max={1000} step={50} value={[price]} onValueChange={(value) => setPrice(value[0])} className="w-full mt-1 sm:mt-2 hover:cursor-pointer" />
                   <p className="text-center mt-1 sm:mt-2 text-sm sm:text-base">${price.toLocaleString()}</p>
                 </div>
                 <div>
-                  <Label htmlFor="website" className="text-sm sm:text-base">
-                    Website Link
-                  </Label>
-                  <Input id="website" value={websiteLink} onChange={(e) => setWebsiteLink(e.target.value)} placeholder="Website URL" className="w-full text-sm sm:text-base mt-1" />
-                </div>
-                <div className="col-span-1">
                   <Label htmlFor="logo" className="text-sm sm:text-base">
-                    Logo
+                    Logo (optional)
                   </Label>
                   <Input id="logo" type="file" accept="image/*" onChange={handleLogoChange} className="w-full hover:cursor-pointer text-sm sm:text-base mt-1" />
                   {logoPreview && (
@@ -371,6 +422,24 @@ export default function Sponsor() {
                       <Image src={logoPreview} alt="Logo Preview" width={80} height={80} className="object-contain sm:w-[100px] sm:h-[100px]" />
                     </div>
                   )}
+                </div>
+                <div>
+                  <Label htmlFor="text" className="text-sm sm:text-base">
+                    Text (optional)
+                  </Label>
+                  <Textarea
+                    id="text"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    placeholder="Enter a short text message (e.g., a tagline or message)"
+                    className="w-full text-sm sm:text-base mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="website" className="text-sm sm:text-base">
+                    Website Link (optional)
+                  </Label>
+                  <Input id="website" value={websiteLink} onChange={(e) => setWebsiteLink(e.target.value)} placeholder="Website URL" className="w-full text-sm sm:text-base mt-1" />
                 </div>
                 <Button onClick={handleSubmit} className="w-full bg-primary hover:bg-primary/90 col-span-1 text-sm sm:text-base py-2" disabled={loading}>
                   {loading ? "Submitting..." : "Submit Sponsorship"}
