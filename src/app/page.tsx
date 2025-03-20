@@ -189,28 +189,29 @@ export default function Home() {
                 <AccordionItem value="item-1">
                   <AccordionTrigger className="text-sm sm:text-base">How do I register for the golf outing?</AccordionTrigger>
                   <AccordionContent className="text-sm sm:text-base">
-                    To register, sign in or sign up on the homepage, then navigate to the "Register" page. Select the number of spots you want to purchase, fill in the required details (name, phone,
-                    email), and proceed to payment. Each spot costs $150.
+                    To register, sign in or sign up on the homepage, then navigate to the &quot;Register&quot; page. Select the number of spots you want to purchase, fill in the required details
+                    (name, phone, email), and proceed to payment. Each spot costs $150.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-2">
                   <AccordionTrigger className="text-sm sm:text-base">How do I manage my team?</AccordionTrigger>
                   <AccordionContent className="text-sm sm:text-base">
-                    After purchasing spots, go to the "Teams" page to create or join a team. You can add or remove spots from your team, and team creators can edit team details or manage a whitelist
-                    if the team is private.
+                    After purchasing spots, go to the &quot;Teams&quot; page to create or join a team. You can add or remove spots from your team, and team creators can edit team details or manage a
+                    whitelist if the team is private.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-3">
                   <AccordionTrigger className="text-sm sm:text-base">How can I sponsor a hole?</AccordionTrigger>
                   <AccordionContent className="text-sm sm:text-base">
-                    Visit the "Sponsor" page after signing in, enter your sponsor details (name, price, logo, website), and submit. Hole sponsorships are available for $200 each, supporting the GVSU
-                    Football Program.
+                    Visit the &quot;Sponsor&quot; page after signing in, enter your sponsor details (name, price, logo, website), and submit. Hole sponsorships are available for $200 each, supporting
+                    the GVSU Football Program.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-4">
                   <AccordionTrigger className="text-sm sm:text-base">What happens after I complete payment?</AccordionTrigger>
                   <AccordionContent className="text-sm sm:text-base">
-                    After payment, your spots will be reserved, and you’ll be redirected to the "Register" page to view your purchased spots. You can then manage your team or edit details as needed.
+                    After payment, your spots will be reserved, and you’ll be redirected to the &quot;Register&quot; page to view your purchased spots. You can then manage your team or edit details as
+                    needed.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-4">

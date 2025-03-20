@@ -27,7 +27,7 @@ export default function NotFound() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold text-foreground">404 - Page Not Found</h1>
-        <p className="text-lg text-muted-foreground">Oops! The page you're looking for doesn't exist.</p>
+        <p className="text-lg text-muted-foreground">Oops! The page you&apos;re looking for doesn&apos;t exist.</p>
         <p className="text-sm text-muted-foreground">You will be redirected to the home page in 3 seconds...</p>
         <p className="text-sm">
           <Link href="/" className="text-primary hover:underline">

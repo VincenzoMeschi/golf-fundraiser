@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 
+// Define the type for sponsor data
+interface SponsorData {
+  userId: string;
+  name: string;
+  price: number;
+  createdAt: Date;
+  logo?: string;
+  text?: string;
+  websiteLink?: string;
+}
+
 // GET: Fetch the sponsor for the logged-in user
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -43,7 +54,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User already has a sponsor" }, { status: 400 });
     }
 
-    const sponsorData = { userId, name, price, createdAt: new Date() };
+    // Define sponsorData with the correct type
+    const sponsorData: SponsorData = { userId, name, price, createdAt: new Date() };
     if (logo) sponsorData.logo = logo;
     if (text) sponsorData.text = text;
     if (websiteLink) sponsorData.websiteLink = websiteLink;

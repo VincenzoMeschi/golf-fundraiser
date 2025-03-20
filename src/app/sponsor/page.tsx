@@ -55,6 +55,7 @@ export default function Sponsor() {
     fetchSponsor();
   }, [fetchSponsor]);
 
+  // Handle payment success
   useEffect(() => {
     const success = searchParams.get("success");
     const sessionId = searchParams.get("session_id");
@@ -85,11 +86,13 @@ export default function Sponsor() {
           setLogoPreview("");
           setText("");
           setWebsiteLink("");
-        } catch (err) {
-          console.error("Error creating sponsor after payment:", err);
+        } catch (err: unknown) {
+          // Assert that err is an Error
+          const error = err as Error;
+          console.error("Error creating sponsor after payment:", error);
           toast({
             title: "Error",
-            description: err.message || "Failed to create sponsor after payment",
+            description: error.message || "Failed to create sponsor after payment",
             variant: "destructive",
           });
         }
@@ -177,11 +180,13 @@ export default function Sponsor() {
 
       const { url } = await response.json();
       window.location.href = url; // Redirect to Stripe Checkout
-    } catch (err) {
-      console.error("Error creating checkout session:", err);
+    } catch (err: unknown) {
+      // Assert that err is an Error
+      const error = err as Error;
+      console.error("Error creating checkout session:", error);
       toast({
         title: "Error",
-        description: err.message || "Failed to initiate payment",
+        description: error.message || "Failed to initiate payment",
         variant: "destructive",
       });
     } finally {
@@ -266,11 +271,13 @@ export default function Sponsor() {
       setEditSponsor(null);
       setLogoFile(null);
       setLogoPreview("");
-    } catch (err) {
-      console.error("Error updating sponsor:", err);
+    } catch (err: unknown) {
+      // Assert that err is an Error
+      const error = err as Error;
+      console.error("Error updating sponsor:", error);
       toast({
         title: "Error",
-        description: err.message || "Failed to update sponsor",
+        description: error.message || "Failed to update sponsor",
         variant: "destructive",
       });
     } finally {

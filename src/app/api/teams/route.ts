@@ -1,7 +1,17 @@
-// /app/api/teams/route.ts
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+
+// Define the Team interface to match the MongoDB document structure
+interface Team {
+  _id: ObjectId;
+  name: string;
+  isPrivate: boolean;
+  creatorId: string;
+  members: Array<{ spotId: string; registrationId: string }>;
+  whitelist: string[]; // Define whitelist as an array of strings
+  createdAt: Date;
+}
 
 export async function GET() {
   const { db } = await connectToDatabase();
@@ -38,13 +48,12 @@ export async function POST(request: Request) {
   return NextResponse.json(result);
 }
 
-// /app/api/teams/route.ts (PUT section)
 export async function PUT(request: Request) {
   const { teamId, spotId, userId, isPrivate, whitelist, name } = await request.json();
   const { db } = await connectToDatabase();
 
   try {
-    const team = await db.collection("teams").findOne({ _id: new ObjectId(teamId) });
+    const team = (await db.collection("teams").findOne({ _id: new ObjectId(teamId) })) as Team | null;
     if (!team) {
       console.error(`Team not found for teamId: ${teamId}`);
       return NextResponse.json({ error: "Team not found" }, { status: 404 });
@@ -84,7 +93,7 @@ export async function PUT(request: Request) {
       console.log(`Join attempt - spotId: ${spotId}, spotEmail: ${spotEmail}, spotName: ${spotName}, whitelist: ${team.whitelist}`);
 
       // Check if the spot's email or name is in the whitelist (case-insensitive)
-      if (team.isPrivate && !team.whitelist.some((w) => w.toLowerCase() === spotEmail || w.toLowerCase() === spotName)) {
+      if (team.isPrivate && !team.whitelist.some((w: string) => w.toLowerCase() === spotEmail || w.toLowerCase() === spotName)) {
         return NextResponse.json({ error: "Not authorized to join private team" }, { status: 403 });
       }
 
@@ -135,13 +144,12 @@ export async function PUT(request: Request) {
   }
 }
 
-// /app/api/teams/route.ts (PATCH section)
 export async function PATCH(request: Request) {
   const { teamId, spotId, userId } = await request.json();
   const { db } = await connectToDatabase();
 
   try {
-    const team = await db.collection("teams").findOne({ _id: new ObjectId(teamId) });
+    const team = (await db.collection("teams").findOne({ _id: new ObjectId(teamId) })) as Team | null;
     if (!team) {
       console.error(`Team not found for teamId: ${teamId}`);
       return NextResponse.json({ error: "Team not found" }, { status: 404 });
@@ -173,7 +181,7 @@ export async function PATCH(request: Request) {
     }
 
     // Check if the team is now empty and delete it if so
-    const updatedTeam = await db.collection("teams").findOne({ _id: new ObjectId(teamId) });
+    const updatedTeam = (await db.collection("teams").findOne({ _id: new ObjectId(teamId) })) as Team | null;
     if (updatedTeam?.members.length === 0) {
       await db.collection("teams").deleteOne({ _id: new ObjectId(teamId) });
       console.log(`Deleted team ${teamId} as it has no members`);
