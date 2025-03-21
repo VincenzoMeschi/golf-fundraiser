@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 
-// Mark the route as dynamic to prevent prerendering during build
 export const dynamic = "force-dynamic";
-export const revalidate = 0; // Disable revalidation for this route
 
 // GET: Fetch all registrations for teams (example implementation)
 export async function GET() {
